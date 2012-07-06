@@ -1,0 +1,2 @@
+(defpackage :famiclom
+  (:use :cl))
