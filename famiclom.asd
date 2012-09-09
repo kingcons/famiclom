@@ -1,6 +1,6 @@
 (defsystem #:famiclom
   :name "famiclom"
-  :description "An emulator for the NES"
+  :description "A headless emulator for the NES"
   :version "0.0.1"
   :license "BSD"
   :author "Brit Butler <redline6561@gmail.com>"
@@ -8,6 +8,9 @@
   :depends-on (:cl-6502 :romreader)
   :serial t
   :components ((:file "packages")
+               (:file "mappers")
+               (:file "apu")
+               (:file "ppu")
                (:file "famiclom"))
   :in-order-to ((test-op (load-op famiclom-tests)))
   :perform (test-op :after (op c)
