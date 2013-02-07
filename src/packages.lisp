@@ -1,7 +1,7 @@
 (defpackage :famiclom
   (:use :cl)
   (:import-from :6502 #:make-cpu
-                      #:get-byte
+                      #:reset
                       #:u8)
   (:import-from :romreader #:rom-binary
                            #:rom-metadata

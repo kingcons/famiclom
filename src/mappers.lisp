@@ -23,9 +23,9 @@
      (defclass ,name (mapper) ())
      (defmethod make-mapper ((id (eql ,id)) &rest args)
        (apply 'make-instance ',name args))
-     (defmethod get-mapper ((mapper (eql ,id)) address)
+     (defmethod get-mapper ((mapper ,name) address)
        ,(getf schema :getter))
-     (defmethod set-mapper ((mapper (eql ,id)) address value)
+     (defmethod set-mapper ((mapper ,name) address value)
        ,(getf schema :setter))))
 
 (defmapper nrom (:id 0)

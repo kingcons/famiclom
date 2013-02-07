@@ -17,13 +17,13 @@
 (defun (setf get-byte-ram%) (new-val addr)
   (setf (aref (nes-ram *nes*) (logand addr #x7ff)) new-val))
 
-(defun get-byte (addr)
+(defun 6502-cpu::get-byte (addr)
   (cond ((< addr #x2000) (get-byte-ram% addr))
         ((< addr #x4000) (get-byte-ppu% addr))
         ((< addr #x4018) (get-byte-input% addr))
         (t (get-mapper (nes-mapper *nes*) addr))))
 
-(defun (setf get-byte) (new-val addr)
+(defun (setf 6502-cpu::get-byte) (new-val addr)
   (cond ((< addr #x2000) (setf (get-byte-ram% addr) new-val))
         ((< addr #x4000) (setf (get-byte-ppu% addr) new-val))
         ((< addr #x4018) (setf (get-byte-input% addr) new-val))
@@ -33,7 +33,8 @@
   "Load the given FILE into the NES."
   (let* ((rom (romreader:load-rom file))
          (mapper (getf (rom-metadata rom) :mapper)))
-    (setf (nes-rom *nes*) rom)
-    (setf (nes-mapper *nes*) (make-mapper (car mapper)))))
+    (setf (nes-rom *nes*) rom
+          (nes-mapper *nes*) (make-mapper (car mapper)))
+    (reset (nes-cpu *nes*))))
 
 ;; init for the nes is basically: load rom, absolute jmp to the contents of $FFFC
