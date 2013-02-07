@@ -21,7 +21,7 @@
   "Generate a mapper class and read/init/shutdown methods from a schema."
   `(progn
      (defclass ,name (mapper) ())
-     (defmethod make-mapper ((id (eql ,id)))
+     (defmethod make-mapper ((id (eql ,id)) &rest args)
        (apply 'make-instance ',name args))
      (defmethod get-mapper ((mapper (eql ,id)) address)
        ,(getf schema :getter))
