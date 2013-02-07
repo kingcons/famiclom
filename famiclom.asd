@@ -10,6 +10,7 @@
   :components ((:file "packages")
                (:file "mappers")
                (:file "apu")
+               (:file "input")
                (:file "ppu")
                (:file "famiclom"))
   :in-order-to ((test-op (load-op famiclom-tests)))
