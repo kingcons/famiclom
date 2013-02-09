@@ -17,12 +17,17 @@
 (defgeneric set-mapper (mapper address value)
   (:documentation "Set the ADDRESS in MAPPER to VALUE."))
 
+; TODO: Improve docs, maybe rethink approach?
 (defmacro defmapper (name (&key id) schema)
-  "Generate a mapper class and read/init/shutdown methods from a schema."
+  "Generate a mapper class and read/init/shutdown methods from a schema.
+NOTE: This macro is unhygienic in its handling of schema."
   `(progn
      (defclass ,name (mapper) ())
      (defmethod make-mapper ((id (eql ,id)) &rest args)
        (apply 'make-instance ',name args))
+     ,@(when (getf schema :init)
+         `((defmethod initialize-instance :after ((instance ,name) &key)
+             ,(getf schema :init))))
      (defmethod get-mapper ((mapper ,name) address)
        ,(getf schema :getter))
      (defmethod set-mapper ((mapper ,name) address value)
@@ -41,7 +46,11 @@
 ; many other methods return constants. metadata block could hold them instead
 
 (defmapper mmc1 (:id 1)
-  (:getter nil :setter nil))
+  (:init (let ((chr-pages (getf (rom-metadata (nes-rom *nes*)) :chr-roms)))
+           (when (plusp chr-pages)
+             'copy-page-to-vram)
+           )
+   :getter nil :setter nil))
 (defmapper unrom (:id 2)
   (:getter nil :setter nil))
 (defmapper cnrom (:id 3)

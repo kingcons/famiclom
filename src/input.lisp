@@ -8,3 +8,13 @@
 (defun (setf get-byte-input%) (new-val addr)
   (when (= addr #x4016)
     'reset-state))
+
+(defvar *gamepad* nil
+  "An input device to retrieve commands from.")
+
+(defgeneric next-key (device)
+  (:documentation "Get the next keypress from DEVICE."))
+
+;; Note: A RESET method is part of the gamepad interface.
+;; The GF is already imported from cl-6502.
+
