@@ -66,11 +66,17 @@
                :tile-index (+ 1 (* 4 (aref oam index)))
                :attribute  (+ 2 (* 4 (aref oam index)))))
 
-(defun do-sprites (ppu fn)
-  (let ((oam (ppu-oam ppu)))
-    (dotimes (i 64)
-      (unless (funcall fn (from-oam oam i) i)
-        (return nil)))))
+(defun get-visible-sprites (ppu)
+  ; TODO: Did I mistranslate semantics here?
+  (with-accessors ((oam ppu-oam)) ppu
+    (loop with count = 0 with result = (make-array 8 :initial-element nil)
+       for i from 0 to 64 for sprite = (from-oam oam i)
+       when (on-scanline sprite ppu (getf (ppu-meta ppu) :scanline))
+       do (if (< count 8)
+              (setf (aref result count) i
+                    count (1+ count))
+              (set-sprite-overflow ppu 1))
+       finally (return result))))
 
 ;;;; Graphics Cards: How do they work?
 
@@ -266,21 +272,8 @@
   )
 
 (defun on-top (x y)
-  ; TODO: determine sprite priority
+  y ; TODO: determine sprite priority
   )
-
-(defun get-visible-sprites (ppu)
-  (let ((count 0)
-        (result (make-array 8 :initial-element nil)))
-    (flet ((visible-p (sprite i)
-             (when (on-scanline sprite ppu (getf (ppu-meta ppu) :scanline))
-               (if (< count 8)
-                   (setf (aref result count) i
-                         count (1+ count))
-                   (progn
-                     (set-sprite-overflow ppu 1)
-                     (return-from get-visible-sprites result))))))
-      (do-sprites ppu #'visible-p))))
 
 ;;;; Core
 
@@ -310,14 +303,13 @@
 
 (defgeneric render-scanline (ppu)
   (:method ((ppu ppu)) ;; TODO: Mirroring. Scrolling?
-    (let* ((sprites (get-visible-sprites ppu))
-           (bd-index (logand (read-vram ppu #x3f00) #x3f))
+    (let* ((bd-index (logand (read-vram ppu #x3f00) #x3f))
            (bd-color (get-color bd-index)))
       (dotimes (x (getf *resolution* :width))
         (let* ((bg-color (when (show-bg ppu)
                            (get-bg-pixel ppu x)))
                (sprite-color (when (show-sprites ppu)
-                               (get-sprite-pixel sprites x bg-color)))
+                               (get-sprite-pixel x bg-color)))
                (color (cond ((and bg-color sprite-color)
                              (on-top bg-color sprite-color))
                             (bg-color bg-color)
