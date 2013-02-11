@@ -237,9 +237,22 @@
 (defun pixel-opaque-p (ppu x)
   (let* ((x (+ (getf (ppu-meta ppu) :x) x))
          (y (+ (getf (ppu-meta ppu) :y) (getf (ppu-meta ppu) :scanline)))
-         )
-    ; TODO
-    ))
+         (base (nametable-addr (round x 8) (round y 8))) ; TODO: Use floor instead?
+         (tile (read-vram ppu (apply '+ (* 32 (first base)) (rest base))))
+         (color (get-pixel-color ppu 'foo tile (mod x 8) (mod y 8))))
+    (if (zerop color)
+        nil
+        (let* ((group (+ (* (round (first base) 4) 8)
+                         (round (second base) 4)))
+               (attrib (read-vram ppu (+ base group #x03c0)))
+               (attr-color (cond ((and (< (mod (second base) 4) 2)
+                                       (< (mod (first base) 4) 2)) attrib)
+                                 ((< (mod (first base) 4) 2) (ash attrib -2))
+                                 ((< (mod (second base) 4) 2) (ash attrib -4))
+                                 (t (ash attrib -6))))
+               (tile-color (logior (ash (logand attr-color #x03) 2) color))
+               (palette-index (logand (read-vram ppu (+ #x3f00 tile-color)) #x3f)))
+          (get-color palette-index)))))
 
 (defun get-sprite-pixel (ppu sprites x opaque-p)
   ; TODO
