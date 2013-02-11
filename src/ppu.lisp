@@ -2,9 +2,9 @@
 
 ;;;; TODO: Understand the magic of PPUs.
 
-(defconstant +resolution+ '(:width 256 :height 240) "NES output resolution.")
+(defvar *resolution* '(:width 256 :height 240) "NES output resolution.")
 
-(defconstant +color-palette+
+(defvar *color-palette*
   #(#x7C #x7C #x7C #x00 #x00 #xFC #x00 #x00 #xBC #x44 #x28 #xBC #x94 #x00 #x84 #xA8
     #x00 #x20 #xA8 #x10 #x00 #x88 #x14 #x00 #x50 #x30 #x00 #x00 #x78 #x00 #x00 #x68
     #x00 #x00 #x58 #x00 #x00 #x40 #x58 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00 #x00
