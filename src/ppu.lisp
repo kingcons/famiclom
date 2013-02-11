@@ -3,6 +3,7 @@
 ;;;; TODO: Understand the magic of PPUs. A nightmare of state.
 
 (defvar *resolution* '(:width 256 :height 240) "NES output resolution.")
+(defvar *frame* (make-array 184320 :element-type 'u8) "A single frame to blit.")
 
 (defvar *color-palette*
   #(#x7C #x7C #x7C #x00 #x00 #xFC #x00 #x00 #xBC #x44 #x28 #xBC #x94 #x00 #x84 #xA8
@@ -21,6 +22,7 @@
 
 ;;;; Sprites: How do they work?
 
+(declaim (inline make-sprite))
 (defstruct sprite
   (x           0 :type u8)
   (y           0 :type u8)
@@ -58,6 +60,18 @@
                (incf first #x1000))
              (list first (1+ first)))))))
 
+(defun from-oam (oam index)
+  (make-sprite :x          (+ 3 (* 4 (aref oam index)))
+               :y          (+ 0 (* 4 (aref oam index)))
+               :tile-index (+ 1 (* 4 (aref oam index)))
+               :attribute  (+ 2 (* 4 (aref oam index)))))
+
+(defun do-sprites (ppu fn)
+  (let ((oam (ppu-oam ppu)))
+    (dotimes (i 64)
+      (unless (funcall fn (from-oam oam i) i)
+        (return nil)))))
+
 ;;;; Graphics Cards: How do they work?
 
 (defstruct ppu
@@ -70,9 +84,10 @@
   (mask      0 :type u8)
   (status    0 :type u8)
   (oam-addr  0 :type u8)
+  (cycles    0 :type u8)
   (scroll    '(:x 0 :y 0 :next :x))
   (addr      '(:val 0 :next :hi))
-  (meta      '(:scanline 0 :buffer 0 :x 0 :y 0 :cy 0)))
+  (meta      '(:scanline 0 :buffer 0 :x 0 :y 0)))
 
 (defmethod initialize-instance :after ((ppu ppu) &key)
   ; TODO: handle variable size nametables in vram, stuff in oam, based on mapper.
@@ -186,16 +201,62 @@
 
 ;;;; Misc Helpers
 
+(declaim (inline make-color get-color put-pixel))
 (defstruct color
   (r 0 :type u8)
   (g 0 :type u8)
   (b 0 :type u8))
 
 (defun get-color (index)
-  (let ((start (* index 3)))
-    (make-color :r (aref +color-palette+ (+ 2 start))
-                :g (aref +color-palette+ (+ 1 start))
-                :b (aref +color-palette+ (+ 0 start)))))
+  (let ((base (* index 3)))
+    (make-color :r (aref +color-palette+ (+ 2 base))
+                :g (aref +color-palette+ (+ 1 base))
+                :b (aref +color-palette+ (+ 0 base)))))
+
+(defun put-pixel (x y color)
+  (let ((base (+ x (* y (getf *resolution* :width)))))
+    (setf (aref *frame* (+ 0 (* 3 base))) (color-r color)
+          (aref *frame* (+ 1 (* 3 base))) (color-g color)
+          (aref *frame* (+ 2 (* 3 base))) (color-b color))))
+
+(defun get-pixel-color (ppu kind tile x y)
+  (let ((offset (+ y (ash tile 4))))
+    (case kind
+      (:bg (incf offset (pattern-table-addr ppu)))
+      (:sprite (incf offset (sprite-table-addr ppu))))
+    (let* ((plane-0 (read-vram ppu offset))
+           (plane-1 (read-vram ppu (+ offset 8)))
+           (bit-0 (logand (ash plane-0 (- (mod x 8) 7)) 1))
+           (bit-1 (logand (ash plane-1 (- (mod x 8) 7)) 1)))
+      (logior (ash 1 bit-1) bit-0))))
+
+(defun nametable-addr (x y)
+  ; TODO
+  )
+
+(defun pixel-opaque-p (ppu x)
+  (let* ((x (+ (getf (ppu-meta ppu) :x) x))
+         (y (+ (getf (ppu-meta ppu) :y) (getf (ppu-meta ppu) :scanline)))
+         )
+    ; TODO
+    ))
+
+(defun get-sprite-pixel (ppu sprites x opaque-p)
+  ; TODO
+  )
+
+(defun get-visible-sprites (ppu)
+  (let ((count 0)
+        (result (make-array 8 :initial-element nil)))
+    (flet ((visible-p (sprite i)
+             (when (on-scanline sprite ppu (getf (ppu-meta ppu) :scanline))
+               (if (< count 8)
+                   (setf (aref result count) i
+                         count (1+ count))
+                   (progn
+                     (set-sprite-overflow ppu 1)
+                     (return-from get-visible-sprites result))))))
+      (do-sprites ppu #'visible-p))))
 
 ;;;; Core
 
@@ -223,4 +284,35 @@
       (6 (update-addr ppu new-val))
       (7 (store-vram ppu (getf (ppu-addr ppu) :val) new-val)))))
 
-(defgeneric ppu-step (ppu to-cycle))
+(defgeneric render-scanline (ppu)
+  (:method ((ppu ppu))
+    ; TODO
+    ))
+
+(defgeneric start-vblank (ppu)
+  (:method ((ppu ppu))
+    (set-in-vblank ppu 1)
+    (set-sprite-zero-hit ppu 0)
+    (when (vblank-nmi ppu) t)))
+
+(defgeneric new-frame (ppu)
+  (:method ((ppu ppu))
+    (setf (getf (ppu-meta ppu) :scanline) 0)
+    (set-in-vblank ppu 0)
+    t))
+
+(defgeneric ppu-step (ppu to-cycle)
+  (:method ((ppu ppu) to-cycle)
+    (let ((cycles-per-scanline 124))
+      (loop with result = '(:vblank-nmi nil :new-frame nil)
+         for next-scanline = (+ (ppu-cycles ppu) cycles-per-scanline)
+         until (> next-scanline to-cycle)
+         do (progn
+              (when (< (getf (ppu-meta ppu) :scanline) (getf *resolution* :height))
+                (render-scanline ppu))
+              (incf (getf (ppu-meta ppu) :scanline))
+              (case (getf (ppu-meta ppu) :scanline)
+                (241 (setf (getf result :vblank-nmi) (start-vblank ppu)))
+                (261 (setf (getf result :new-frame) (new-frame ppu))))
+              (incf (ppu-cycles ppu) cycles-per-scanline))
+         finally (return result)))))
