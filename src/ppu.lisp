@@ -231,10 +231,17 @@
       (logior (ash 1 bit-1) bit-0))))
 
 (defun nametable-addr (x y)
-  ; TODO
-  )
+  (let* ((x (mod x 64))
+         (y (mod y 60))
+         (x-index (>= x 32))
+         (y-index (>= y 30))
+         (base (cond ((and x-index y-index) #x2c00)
+                     (x-index #x2400)
+                     (y-index #x2800)
+                     (t #x2000))))
+    (list (mod y 30) (mod x 32) base)))
 
-(defun pixel-opaque-p (ppu x)
+(defun get-bg-pixel (ppu x)
   (let* ((x (+ (getf (ppu-meta ppu) :x) x))
          (y (+ (getf (ppu-meta ppu) :y) (getf (ppu-meta ppu) :scanline)))
          (base (nametable-addr (round x 8) (round y 8))) ; TODO: Use floor instead?
@@ -256,6 +263,10 @@
 
 (defun get-sprite-pixel (ppu sprites x opaque-p)
   ; TODO
+  )
+
+(defun on-top (x y)
+  ; TODO: determine sprite priority
   )
 
 (defun get-visible-sprites (ppu)
@@ -298,9 +309,21 @@
       (7 (store-vram ppu (getf (ppu-addr ppu) :val) new-val)))))
 
 (defgeneric render-scanline (ppu)
-  (:method ((ppu ppu))
-    ; TODO
-    ))
+  (:method ((ppu ppu)) ;; TODO: Mirroring. Scrolling?
+    (let* ((sprites (get-visible-sprites ppu))
+           (bd-index (logand (read-vram ppu #x3f00) #x3f))
+           (bd-color (get-color bd-index)))
+      (dotimes (x (getf *resolution* :width))
+        (let* ((bg-color (when (show-bg ppu)
+                           (get-bg-pixel ppu x)))
+               (sprite-color (when (show-sprites ppu)
+                               (get-sprite-pixel sprites x bg-color)))
+               (color (cond ((and bg-color sprite-color)
+                             (on-top bg-color sprite-color))
+                            (bg-color bg-color)
+                            (sprite-color sprite-color)
+                            (t bd-color))))
+          (put-pixel x (getf (ppu-meta ppu) :scanline) color))))))
 
 (defgeneric start-vblank (ppu)
   (:method ((ppu ppu))
