@@ -1,6 +1,6 @@
 (in-package :famiclom)
 
-;;;; TODO: Understand the magic of PPUs.
+;;;; TODO: Understand the magic of PPUs. A nightmare of state.
 
 (defvar *resolution* '(:width 256 :height 240) "NES output resolution.")
 
@@ -87,7 +87,7 @@
 
 (defctrl x-scroll-offset    #x01 0 256)
 (defctrl y-scroll-offset    #x02 0 240)
-(defctrl incf-vram-addr     #x04 1 32)
+(defctrl incf-vram-addr     #x04 1 32) ; probably rename to vram-step
 (defctrl sprite-table-addr  #x08 0 #x1000)
 (defctrl pattern-table-addr #x10 0 #x1000)
 (defctrl sprite-size        #x20 :8 :16)
@@ -167,12 +167,22 @@
         ((< addr #x4000) (let ((addr (logand addr #x1f)))
                            (when (= addr #x10) (setf addr #x00))
                            (setf (aref (ppu-palette ppu) addr) val)))
-        (t (error "WRITE: invalid vram address ~a" addr))))
+        (t (error "WRITE: invalid vram address ~a" addr)))
+  (incf (getf (ppu-addr ppu) :val) (incf-vram-addr ppu)))
 
 (defmethod store-oam ((ppu ppu) val)
   (with-accessors ((addr ppu-oam-addr)) ppu
     (setf (aref (ppu-oam ppu) addr) val)
     (incf addr)))
+
+(defun buffered-read (ppu)
+  (let ((result (read-vram ppu (getf (ppu-addr ppu) :val))))
+    (incf (getf (ppu-addr ppu) :val) (incf-vram-addr ppu))
+    (if (< addr #x3f00)
+        (prog1
+            (getf (ppu-meta ppu) :buffer)
+          (setf (getf (ppu-meta ppu) :buffer) result))
+        result)))
 
 ;;;; Misc Helpers
 
@@ -199,7 +209,7 @@
       (4 (error "no OAM read yet"))
       (5 0)
       (6 0)
-      (7 'vram-load))))
+      (7 (buffered-read ppu)))))
 
 (defun (setf get-byte-ppu%) (new-val addr)
   (let ((ppu (nes-ppu *nes*)))
@@ -211,6 +221,6 @@
       (4 (store-oam ppu new-val))
       (5 (update-scroll ppu new-val))
       (6 (update-addr ppu new-val))
-      (7 'vram-store))))
+      (7 (store-vram ppu (getf (ppu-addr ppu) :val) new-val)))))
 
 (defgeneric ppu-step (ppu to-cycle))
