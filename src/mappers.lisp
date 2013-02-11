@@ -18,11 +18,11 @@
   (:documentation "Set the ADDRESS in MAPPER to VALUE."))
 
 ; TODO: Improve docs, maybe rethink approach?
-(defmacro defmapper (name (&key id) schema)
+(defmacro defmapper (name (&key id slots) schema)
   "Generate a mapper class and read/init/shutdown methods from a schema.
 NOTE: This macro is unhygienic in its handling of schema."
   `(progn
-     (defclass ,name (mapper) ())
+     (defclass ,name (mapper) (,@slots))
      (defmethod make-mapper ((id (eql ,id)) &rest args)
        (apply 'make-instance ',name args))
      ,@(when (getf schema :init)
@@ -45,12 +45,21 @@ NOTE: This macro is unhygienic in its handling of schema."
 ; read: Index into PRG block at (addr & prg-size--)
 ; many other methods return constants. metadata block could hold them instead
 
-(defmapper mmc1 (:id 1)
-  (:init (let ((chr-pages (getf (rom-metadata (nes-rom *nes*)) :chr-roms)))
-           (when (plusp chr-pages)
-             'copy-page-to-vram)
-           )
-   :getter nil :setter nil))
+(defmapper mmc1 (:id 1 :slots ((regs :initform #(#x0c #x00 #x00 #x00)
+                                     :accessor mapper-regs)
+                               (accum :initform 0 :accessor mapper-accum)
+                               (counter :initform 0 :accessor mapper-counter)
+                               (bank :initform 0 :accessor mapper-bank)
+                               (bank-mask :initform 0 :accessor mapper-bank-mask)))
+  (:init (let ((meta (rom-metadata (nes-rom *nes*))))
+           (when (plusp (getf meta :chr-roms))
+             'copy-page-to-vram) ; TODO
+           (when (member (getf meta :prg-roms) '(32 64))
+             (setf (mapper-bank-mask instance) 1)))
+   :getter (let ((offset (logand address #x3fff)))
+             'do-it) ; TODO
+   :setter nil)) ; TODO
+
 (defmapper unrom (:id 2)
   (:getter nil :setter nil))
 (defmapper cnrom (:id 3)
