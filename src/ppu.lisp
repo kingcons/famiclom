@@ -62,7 +62,9 @@
 
 (defstruct ppu
   "The Nintendo Picture Processing Unit."
-  (vram      (make-array #x4000 :element-type 'u8))
+  ; (vram      (make-array #x4000 :element-type 'u8)) ; Just an abstraction. Doesn't really exist.
+  (nametable (make-array #x0800 :element-type 'u8))
+  (palette   (make-array #x0020 :element-type 'u8))
   (oam       (make-array #x0100 :element-type 'u8)) ; Sprite RAM/Object Attrib Mem
   (ctrl      0 :type u8)
   (mask      0 :type u8)
@@ -147,19 +149,30 @@
         (:lo (setf (getf addr :val) (logior (logand prev #xff00) val)
                    (getf addr :next) :hi
                    (getf meta :x)
+                   ;; HACK: Fake out the X scroll register.
+                   ;; TODO: Y scrolling.
                    (let* ((initial (logand (getf addr :val) #x07ff))
                           (x-base (if (< initial #x400) 0 256)))
                      (logior (wrap-byte (getf meta :x)) x-base))))))))
 
-(defmethod store-oam ((ppu ppu) val)
-  (with-accessors ((oam ppu-oam)
-                   (addr ppu-oam-addr)) ppu
-    (setf (aref oam addr) val)
-    (incf addr)))
+(defmethod read-vram ((ppu ppu) addr)
+  (cond ((< addr #x2000) (aref (rom-chr (nes-rom *nes*)) addr))
+        ((< addr #x3f00) (aref (ppu-nametable ppu) (logand addr #x07ff)))
+        ((< addr #x4000) (aref (ppu-palette ppu) (logand addr #x1f)))
+        (t (error "READ: invalid vram address ~a" addr))))
 
-(defun store-oam (ppu val)
-  (setf (aref (ppu-oam ppu) (ppu-oam-addr ppu)) val)
-  (incf (ppu-oam-addr ppu)))
+(defmethod store-vram ((ppu ppu) addr val)
+  (cond ((< addr #x2000) nil)
+        ((< addr #x3f00) (setf (aref (ppu-nametable ppu) (logand addr #x07ff)) val))
+        ((< addr #x4000) (let ((addr (logand addr #x1f)))
+                           (when (= addr #x10) (setf addr #x00))
+                           (setf (aref (ppu-palette ppu) addr) val)))
+        (t (error "WRITE: invalid vram address ~a" addr))))
+
+(defmethod store-oam ((ppu ppu) val)
+  (with-accessors ((addr ppu-oam-addr)) ppu
+    (setf (aref (ppu-oam ppu) addr) val)
+    (incf addr)))
 
 ;;;; Misc Helpers
 
