@@ -10,6 +10,7 @@
   (rom    nil))
 
 (defvar *nes* (make-nes))
+(defvar *debug* t)
 
 (defun get-byte-ram% (addr)
   (aref (nes-ram *nes*) (logand addr #x7ff)))
@@ -30,6 +31,13 @@
         (t (set-mapper (nes-mapper *nes*) addr new-val))))
 
 ;; TODO: What about get-range? Used in disasm and cl-6502 utils.
+
+(defmethod 6502::6502-step :before ((cpu 6502::cpu) opcode)
+  (when *debug*
+    (let ((next (vector opcode
+                        (6502-cpu:get-byte (+ 1 (6502::immediate cpu)))
+                        (6502-cpu:get-byte (+ 2 (6502::immediate cpu))))))
+      (6502-cpu::disasm-instruction next 0))))
 
 (defun load-rom (file)
   "Load the given FILE into the NES."
@@ -52,7 +60,9 @@
          (let ((c-step (6502-step cpu (6502-cpu:get-byte (6502::immediate cpu))))
                (p-step (ppu-step ppu (6502::cpu-cc cpu))))
            (when (getf p-step :vblank-nmi)
+             (format t "DOING THE NMI STUFF!~%")
              (6502::nmi cpu))
            (when (getf p-step :new-frame)
-             (sdl:draw-surface *frame* *screen*)
+             (format t "WE ARE DRAWING STUFF!~%")
+             (sdl:draw-surface *frame* :surface *screen*)
              (sdl:update-display *screen*))))))

@@ -47,6 +47,7 @@
           (:16 (< scanline (+ (sprite-y sprite) 16)))))))
 
 (defmethod in-bounding-box ((sprite sprite) ppu x &optional y)
+  (declare (ignore y)) ; TODO: we're using scanline for y. don't panic.
   (and (>= x (sprite-x sprite))
        (< x (+ (sprite-x sprite) 8))
        (on-scanline sprite ppu)))
@@ -54,7 +55,7 @@
 (defmethod tiles ((sprite sprite) ppu)
   (let ((base (pattern-table-addr ppu)))
     (ecase (sprite-size ppu)
-      (:8 (logior (tile-index sprite) base))
+      (:8 (logior (sprite-tile-index sprite) base))
       (:16 (let* ((initial (sprite-tile-index sprite))
                   (first (logandc2 initial 1)))
              (when (plusp (logand initial 1))
@@ -91,7 +92,7 @@
   (mask      0 :type u8)
   (status    0 :type u8)
   (oam-addr  0 :type u8)
-  (cycles    0 :type u8)
+  (cycles    0 :type fixnum)
   (scroll    '(:x 0 :y 0 :next :x))
   (addr      '(:val 0 :next :hi))
   (meta      '(:scanline 0 :buffer 0 :x 0 :y 0)))
@@ -109,7 +110,7 @@
 
 (defctrl x-scroll-offset    #x01 0 256)
 (defctrl y-scroll-offset    #x02 0 240)
-(defctrl incf-vram-addr     #x04 1 32) ; probably rename to vram-step
+(defctrl vram-step          #x04 1 32)
 (defctrl sprite-table-addr  #x08 0 #x1000)
 (defctrl pattern-table-addr #x10 0 #x1000)
 (defctrl sprite-size        #x20 :8 :16)
@@ -190,7 +191,7 @@
                            (when (= addr #x10) (setf addr #x00))
                            (setf (aref (ppu-palette ppu) addr) val)))
         (t (error "WRITE: invalid vram address ~a" addr)))
-  (incf (getf (ppu-addr ppu) :val) (incf-vram-addr ppu)))
+  (incf (getf (ppu-addr ppu) :val) (vram-step ppu)))
 
 (defmethod store-oam ((ppu ppu) val)
   (with-accessors ((addr ppu-oam-addr)) ppu
@@ -198,8 +199,9 @@
     (incf addr)))
 
 (defun buffered-read (ppu)
-  (let ((result (read-vram ppu (getf (ppu-addr ppu) :val))))
-    (incf (getf (ppu-addr ppu) :val) (incf-vram-addr ppu))
+  (let* ((addr (getf (ppu-addr ppu) :val))
+         (result (read-vram ppu addr)))
+    (incf (getf (ppu-addr ppu) :val) (vram-step ppu))
     (if (< addr #x3f00)
         (prog1
             (getf (ppu-meta ppu) :buffer)
@@ -258,7 +260,7 @@
         nil
         (let* ((group (+ (* (round (first base) 4) 8)
                          (round (second base) 4)))
-               (attrib (read-vram ppu (+ base group #x03c0)))
+               (attrib (read-vram ppu (apply #'+ #x03c0 group base)))
                (attr-color (cond ((and (< (mod (second base) 4) 2)
                                        (< (mod (first base) 4) 2)) attrib)
                                  ((< (mod (first base) 4) 2) (ash attrib -2))
@@ -289,7 +291,7 @@
                  (setf pattern-color (get-pixel-color ppu :sprite tile x y))))
               (list
                (error "8x16 sprite rendering unimplemented!")))
-            (unless (zerop color)
+            (unless (zerop pattern-color)
               (return nil))
             (when (and (zerop i) opaque-p)
               (set-sprite-zero-hit ppu 1))
@@ -298,8 +300,8 @@
               (return (get-color (read-vram ppu palette-index))))))))
 
 (defun on-top (x y)
-  y ; TODO: determine sprite priority
-  )
+  (declare (ignore x)) ; TODO: determine sprite priority
+  y)
 
 ;;;; Core
 
@@ -335,7 +337,7 @@
         (let* ((bg-color (when (show-bg ppu)
                            (get-bg-pixel ppu x)))
                (sprite-color (when (show-sprites ppu)
-                               (get-sprite-pixel x bg-color)))
+                               (get-sprite-pixel ppu x bg-color)))
                (color (cond ((and bg-color sprite-color)
                              (on-top bg-color sprite-color))
                             (bg-color bg-color)
