@@ -38,17 +38,18 @@
       :above
       :below))
 
-(defmethod on-scanline ((sprite sprite) ppu y)
-  (if (< y (sprite-y sprite))
-      nil
-      (ecase (sprite-size ppu)
-        (:8 (< y (+ (sprite-y sprite) 8)))
-        (:16 (< y (+ (sprite-y sprite) 16))))))
+(defmethod on-scanline ((sprite sprite) ppu)
+  (let ((scanline (getf (ppu-meta ppu) :scanline)))
+    (if (< scanline (sprite-y sprite))
+        nil
+        (ecase (sprite-size ppu)
+          (:8 (< scanline (+ (sprite-y sprite) 8)))
+          (:16 (< scanline (+ (sprite-y sprite) 16)))))))
 
-(defmethod in-bounding-box ((sprite sprite) ppu x y)
+(defmethod in-bounding-box ((sprite sprite) ppu x &optional y)
   (and (>= x (sprite-x sprite))
        (< x (+ (sprite-x sprite) 8))
-       (on-scanline sprite ppu y)))
+       (on-scanline sprite ppu)))
 
 (defmethod tiles ((sprite sprite) ppu)
   (let ((base (pattern-table-addr ppu)))
@@ -71,7 +72,7 @@
   (with-accessors ((oam ppu-oam)) ppu
     (loop with count = 0 with result = (make-array 8 :initial-element nil)
        for i from 0 to 64 for sprite = (from-oam oam i)
-       when (on-scanline sprite ppu (getf (ppu-meta ppu) :scanline))
+       when (on-scanline sprite ppu)
        do (if (< count 8)
               (setf (aref result count) i
                     count (1+ count))
@@ -267,9 +268,34 @@
                (palette-index (logand (read-vram ppu (+ #x3f00 tile-color)) #x3f)))
           (get-color palette-index)))))
 
-(defun get-sprite-pixel (ppu sprites x opaque-p)
-  ; TODO
-  )
+(defun get-sprite-pixel (ppu x opaque-p)
+  ;; get-sprite-pixel needs to return nil if every visible-sprite is nil,
+  ;; if none of the sprites are in our bounding box or if none are opaque.
+  (let ((sprites (get-visible-sprites ppu))
+        (oam (ppu-oam ppu)))
+    (loop for i across sprites when i
+       do (let* ((sprite (from-oam oam i))
+                 (tile (tiles sprite ppu))
+                 (pattern-color nil))
+            ; TODO: We want to continue here. Is return right?
+            (unless (in-bounding-box sprite ppu x)
+              (return nil))
+            (etypecase tile
+              (fixnum
+               (let ((x (- x (sprite-x sprite)))
+                     (y (- (getf (ppu-meta ppu) :scanline) (sprite-y sprite))))
+                 (when (flip-h sprite) (setf x (- 7 x)))
+                 (when (flip-v sprite) (setf y (- 7 y)))
+                 (setf pattern-color (get-pixel-color ppu :sprite tile x y))))
+              (list
+               (error "8x16 sprite rendering unimplemented!")))
+            (unless (zerop color)
+              (return nil))
+            (when (and (zerop i) opaque-p)
+              (set-sprite-zero-hit ppu 1))
+            (let* ((tile-color (logior (ash (palette sprite) 2) pattern-color))
+                   (palette-index (logand (+ #x3f00 tile-color) #x3f)))
+              (return (get-color (read-vram ppu palette-index))))))))
 
 (defun on-top (x y)
   y ; TODO: determine sprite priority
