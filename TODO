@@ -1,0 +1,6 @@
+TODO:
+
+* Debug all the things. (til SMB runs)
+* Refactor PPU heavily.
+* Profile & optimize anything terribly egregious.
+* Add MMC1 mapper support. Try Zelda+Mega Man 2.
