@@ -216,9 +216,9 @@
 
 (defun get-color (index)
   (let ((base (* index 3)))
-    (make-color :r (aref +color-palette+ (+ 2 base))
-                :g (aref +color-palette+ (+ 1 base))
-                :b (aref +color-palette+ (+ 0 base)))))
+    (make-color :r (aref *color-palette* (+ 2 base))
+                :g (aref *color-palette* (+ 1 base))
+                :b (aref *color-palette* (+ 0 base)))))
 
 (defun put-pixel (x y color)
   (let ((base (+ x (* y (getf *resolution* :width)))))
