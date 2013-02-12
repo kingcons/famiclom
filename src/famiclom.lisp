@@ -38,3 +38,26 @@
     (setf (nes-rom *nes*) rom
           (nes-mapper *nes*) (make-mapper (car mapper)))
     (reset (nes-cpu *nes*))))
+
+(defun play-rom (file)
+  (load-rom file)
+  (sdl:with-init ()
+    (setf *screen* (sdl:window 256 240 :double-buffer t :sw t))
+    (run)))
+
+; for debug purposes
+; also look into clean tracing for get-byte*/get-mapper
+(defmethod 6502::6502-step :before ((cpu 6502::cpu) opcode)
+  (6502-cpu::disasm-instruction (vector opcode 0 0) 0))
+
+(defun run ()
+  (with-accessors ((cpu nes-cpu)
+                   (ppu nes-ppu)) *nes*
+    (loop do
+         (let ((c-step (6502-step cpu (6502-cpu:get-byte (6502::immediate cpu))))
+               (p-step (ppu-step ppu (6502::cpu-cc cpu))))
+           (when (getf p-step :vblank-nmi)
+             (6502::nmi cpu))
+           (when (getf p-step :new-frame)
+             (sdl:draw-surface *frame* *screen*)
+             (sdl:update-display *screen*))))))
