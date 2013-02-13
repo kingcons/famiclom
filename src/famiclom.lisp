@@ -32,7 +32,7 @@
 
 ;; TODO: What about get-range? Used in disasm and cl-6502 utils.
 
-(defmethod 6502::6502-step :before ((cpu 6502::cpu) opcode)
+(defmethod 6502-step :before ((cpu cpu) opcode)
   (when *debug*
     (let ((next (vector opcode
                         (6502-cpu:get-byte (+ 1 (6502::immediate cpu)))
@@ -63,6 +63,4 @@
              (format t "DOING THE NMI STUFF!~%")
              (6502::nmi cpu))
            (when (getf p-step :new-frame)
-             (format t "WE ARE DRAWING STUFF!~%")
-             (sdl:draw-surface *frame* :surface *screen*)
              (sdl:update-display *screen*))))))

@@ -217,10 +217,12 @@
   (b 0 :type u8))
 
 (defun get-color (index)
-  (let ((base (* index 3)))
-    (make-color :r (aref *color-palette* (+ 2 base))
-                :g (aref *color-palette* (+ 1 base))
-                :b (aref *color-palette* (+ 0 base)))))
+  (let* ((base (* index 3))
+         (red (aref *color-palette* (+ 2 base)))
+         (green (aref *color-palette* (+ 1 base)))
+         (blue (aref *color-palette* (+ 0 base))))
+    ;(sdl:color :r red :g green :b blue)
+    (+ (ash red 16) (ash green 8) blue)))
 
 (defun put-pixel (x y color)
   (let ((base (+ x (* y (getf *resolution* :width)))))
@@ -343,7 +345,9 @@
                             (bg-color bg-color)
                             (sprite-color sprite-color)
                             (t bd-color))))
-          (put-pixel x (getf (ppu-meta ppu) :scanline) color))))))
+          ;(put-pixel x (getf (ppu-meta ppu) :scanline) color)
+          (sdl:with-pixel (pixels (sdl:fp *screen*))
+            (sdl:write-pixel pixels x (getf (ppu-meta ppu) :scanline) color)))))))
 
 (defgeneric start-vblank (ppu)
   (:method ((ppu ppu))

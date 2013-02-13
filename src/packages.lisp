@@ -2,6 +2,7 @@
   (:use :cl)
   (:import-from :6502 #:wrap-byte
                       #:make-cpu
+                      #:cpu
                       #:6502-step
                       #:reset
                       #:u8)
