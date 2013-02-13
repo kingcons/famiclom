@@ -84,7 +84,6 @@
 
 (defstruct ppu
   "The Nintendo Picture Processing Unit."
-  ; (vram      (make-array #x4000 :element-type 'u8)) ; Just an abstraction. Doesn't really exist.
   (nametable (make-array #x0800 :element-type 'u8))
   (palette   (make-array #x0020 :element-type 'u8))
   (oam       (make-array #x0100 :element-type 'u8)) ; Sprite RAM/Object Attrib Mem

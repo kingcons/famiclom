@@ -9,8 +9,14 @@
   (mapper nil)
   (rom    nil))
 
+(defmethod reset :after ((nes nes))
+  (let ((ppu (nes-ppu nes)))
+    (setf (ppu-scroll ppu) '(:x 0 :y 0 :next :x)
+          (ppu-addr ppu) '(:val 0 :next :hi)
+          (ppu-meta ppu) '(:scanline 0 :buffer 0 :x 0 :y 0))))
+
 (defvar *nes* (make-nes))
-(defvar *debug* t)
+(defparameter *debug* t)
 
 (defun get-byte-ram% (addr)
   (aref (nes-ram *nes*) (logand addr #x7ff)))
@@ -29,8 +35,6 @@
         ((< addr #x4000) (setf (get-byte-ppu% addr) new-val))
         ((< addr #x4018) (setf (get-byte-input% addr) new-val))
         (t (set-mapper (nes-mapper *nes*) addr new-val))))
-
-;; TODO: What about get-range? Used in disasm and cl-6502 utils.
 
 (defmethod 6502-step :before ((cpu cpu) opcode)
   (when *debug*
@@ -61,6 +65,8 @@
                (p-step (ppu-step ppu (6502::cpu-cc cpu))))
            (when (getf p-step :vblank-nmi)
              (format t "DOING THE NMI STUFF!~%")
-             (6502::nmi cpu))
+             (6502::nmi cpu)
+             (setf (getf p-step :vblank-nmi) nil))
            (when (getf p-step :new-frame)
-             (sdl:update-display *screen*))))))
+             (sdl:update-display *screen*)
+             (setf (getf p-step :new-frame) nil))))))
