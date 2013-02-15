@@ -8,6 +8,7 @@
   :depends-on (:cl-6502 :romreader :lispbuilder-sdl)
   :serial t
   :components ((:file "packages")
+               (:file "nestest")
                (:file "mappers")
                (:file "apu")
                (:file "ppu")
@@ -28,3 +29,9 @@
 (defmethod operation-done-p ((op test-op)
                              (c (eql (find-system :famiclom))))
   (values nil))
+
+(defpackage #:famiclom-conf (:export #:app-path))
+(defvar famiclon-conf:*basedir*
+  (make-pathname :defaults *load-truename* :name nil :type nil))
+(defun famiclom-conf:app-path (path &rest args)
+  (merge-pathnames (apply 'format nil path args) famiclom-conf::*basedir*))

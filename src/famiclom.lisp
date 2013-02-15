@@ -36,12 +36,13 @@
         ((< addr #x4018) (setf (get-byte-input% addr) new-val))
         (t (set-mapper (nes-mapper *nes*) addr new-val))))
 
+(defun 6502-cpu:get-range (start end)
+  (coerce (loop for i from start to end
+             collecting (6502-cpu:get-byte i)) 'vector))
+
 (defmethod 6502-step :before ((cpu cpu) opcode)
   (when *debug*
-    (let ((next (vector opcode
-                        (6502-cpu:get-byte (+ 1 (6502::immediate cpu)))
-                        (6502-cpu:get-byte (+ 2 (6502::immediate cpu))))))
-      (6502-cpu::disasm-instruction next 0))))
+    (6502-cpu::disasm-ins (6502::immediate cpu))))
 
 (defun load-rom (file)
   "Load the given FILE into the NES."
