@@ -31,7 +31,7 @@
   (values nil))
 
 (defpackage #:famiclom-conf (:export #:app-path))
-(defvar famiclon-conf:*basedir*
+(defvar famiclom-conf::*basedir*
   (make-pathname :defaults *load-truename* :name nil :type nil))
 (defun famiclom-conf:app-path (path &rest args)
   (merge-pathnames (apply 'format nil path args) famiclom-conf::*basedir*))

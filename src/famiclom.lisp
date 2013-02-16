@@ -37,7 +37,7 @@
         (t (set-mapper (nes-mapper *nes*) addr new-val))))
 
 (defun 6502-cpu:get-range (start end)
-  (coerce (loop for i from start to end
+  (coerce (loop for i from start to (1- end)
              collecting (6502-cpu:get-byte i)) 'vector))
 
 (defmethod 6502-step :before ((cpu cpu) opcode)

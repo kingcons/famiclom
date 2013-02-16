@@ -24,4 +24,4 @@
          do (let ((step (6502::6502-step cpu (get-byte (6502::immediate cpu)))))
               (unless (search (log-state cpu) line)
                 (format t "BUG: Got ~A, expected ~%~A~%" (log-state cpu) line)
-                (return nil)))))))
+                (return t)))))))
