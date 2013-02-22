@@ -24,25 +24,25 @@
 (defun (setf get-byte-ram%) (new-val addr)
   (setf (aref (nes-ram *nes*) (logand addr #x7ff)) new-val))
 
-(defun 6502-cpu:get-byte (addr)
+(defun 6502:get-byte (addr)
   (cond ((< addr #x2000) (get-byte-ram% addr))
         ((< addr #x4000) (get-byte-ppu% addr))
         ((< addr #x4018) (get-byte-input% addr))
         (t (get-mapper (nes-mapper *nes*) addr))))
 
-(defun (setf 6502-cpu:get-byte) (new-val addr)
+(defun (setf 6502:get-byte) (new-val addr)
   (cond ((< addr #x2000) (setf (get-byte-ram% addr) new-val))
         ((< addr #x4000) (setf (get-byte-ppu% addr) new-val))
         ((< addr #x4018) (setf (get-byte-input% addr) new-val))
         (t (set-mapper (nes-mapper *nes*) addr new-val))))
 
-(defun 6502-cpu:get-range (start end)
+(defun 6502:get-range (start end)
   (coerce (loop for i from start to (1- end)
-             collecting (6502-cpu:get-byte i)) 'vector))
+             collecting (6502:get-byte i)) 'vector))
 
 (defmethod 6502-step :before ((cpu cpu) opcode)
   (when *debug*
-    (6502-cpu::disasm-ins (6502::immediate cpu))))
+    (6502::disasm-ins (6502:immediate cpu))))
 
 (defun load-rom (file)
   "Load the given FILE into the NES."
@@ -62,11 +62,11 @@
   (with-accessors ((cpu nes-cpu)
                    (ppu nes-ppu)) *nes*
     (loop do
-         (let ((c-step (6502-step cpu (6502-cpu:get-byte (6502::immediate cpu))))
-               (p-step (ppu-step ppu (6502::cpu-cc cpu))))
+         (let ((c-step (6502-step cpu (6502:get-byte (6502:immediate cpu))))
+               (p-step (ppu-step ppu (6502:cpu-cc cpu))))
            (when (getf p-step :vblank-nmi)
              (format t "DOING THE NMI STUFF!~%")
-             (6502::nmi cpu)
+             (6502:nmi cpu)
              (setf (getf p-step :vblank-nmi) nil))
            (when (getf p-step :new-frame)
              (sdl:update-display *screen*)

@@ -4,14 +4,14 @@
   ;(reset *nes*)
   (setf *nes* (make-nes))
   (load-rom (app-path "tests/nestest.nes"))
-  (setf (6502::cpu-pc (nes-cpu *nes*)) #xc000))
+  (setf (6502:cpu-pc (nes-cpu *nes*)) #xc000))
 
 (defmethod log-state ((cpu cpu))
-  (with-accessors ((ar 6502::cpu-ar)
-                   (xr 6502::cpu-xr)
-                   (yr 6502::cpu-yr)
-                   (sr 6502::cpu-sr)
-                   (sp 6502::cpu-sp)) cpu
+  (with-accessors ((ar 6502:cpu-ar)
+                   (xr 6502:cpu-xr)
+                   (yr 6502:cpu-yr)
+                   (sr 6502:cpu-sr)
+                   (sp 6502:cpu-sp)) cpu
     (format nil "A:~2,'0x X:~2,'0x Y:~2,'0x P:~2,'0x SP:~2,'0x" ar xr yr sr sp)))
 
 (defun find-bug ()
@@ -22,5 +22,5 @@
     (with-open-file (in (app-path "tests/nestest.log"))
       (loop for line = (read-line in nil) while line
          if (search (log-state cpu) line)
-         do (6502:6502-step cpu (get-byte (6502::immediate cpu)))
+         do (6502:6502-step cpu (get-byte (6502:immediate cpu)))
          else return (format t "BUG: Got ~A, expected ~%~A~%" (log-state cpu) line)))))
