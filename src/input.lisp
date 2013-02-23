@@ -10,10 +10,10 @@
                  (:sdl-key-left    :left)
                  (:sdl-key-right   :right)))
 
-(deftype bool () '(member t nil))
+(deftype bool () '(unsigned-byte 1))
 
 (defstruct pad
-  (buttons (make-array 8 :element-type 'bool :initial-element nil))
+  (buttons (make-array 8 :element-type 'bool))
   (strobe :a :type keyword))
 
 (defvar *pad* (make-pad) "An input device to retrieve commands from.")
@@ -41,7 +41,7 @@
   "Update the state for the given KEY."
   (case key
     (:sdl-key-escape :quit)
-    (t (setf (aref (pad-buttons pad) (%keymap key)) t))))
+    (t (setf (aref (pad-buttons pad) (%keymap key)) 1))))
 
 (defun get-byte-input% (addr)
   (if (= addr #x4016)
