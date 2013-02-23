@@ -34,15 +34,14 @@
   (:method (pad)
     (sdl:with-events ()
       (:quit-event () :quit)
-      (:key-down-event (:key key)
-        (case key
-          (:sdl-key-escape :quit)
-          (t (setf (aref (pad-buttons pad) (keymap key)) t))))
+      (:key-down-event (:key key) (handle-input key pad))
       (:idle () nil))))
 
-(defgeneric handle-input (key down)
-  (:documentation "Update the KEY state based on DOWN.")
-  (:method (key down) nil))
+(defun handle-input (key pad)
+  "Update the state for the given KEY."
+  (case key
+    (:sdl-key-escape :quit)
+    (t (setf (aref (pad-buttons pad) (%keymap key)) t))))
 
 (defun get-byte-input% (addr)
   (if (= addr #x4016)
