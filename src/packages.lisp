@@ -7,6 +7,7 @@
                       #:6502-step
                       #:reset
                       #:u8
+                      #:defenum
                       #:get-byte
                       #:get-word
                       #:get-range)
