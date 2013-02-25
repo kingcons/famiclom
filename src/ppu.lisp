@@ -3,7 +3,7 @@
 ;;;; TODO: Understand the magic of PPUs. A nightmare of state.
 
 (defvar *resolution* '(:width 256 :height 240) "NES output resolution.")
-(defvar *frame* (make-array 184320 :element-type 'u8) "A single frame to blit.")
+(defvar *frame* (bytevector 184320) "A single frame to blit.")
 
 (defvar *color-palette*
   #(#x7C #x7C #x7C #x00 #x00 #xFC #x00 #x00 #xBC #x44 #x28 #xBC #x94 #x00 #x84 #xA8
@@ -84,10 +84,10 @@
 
 (defstruct ppu
   "The Nintendo Picture Processing Unit."
-  (pattern-table (make-array #x2000 :element-type 'u8))
-  (nametable     (make-array #x0800 :element-type 'u8))
-  (palette       (make-array #x0020 :element-type 'u8))
-  (oam           (make-array #x0100 :element-type 'u8)) ; Sprite RAM/Object Attrib Mem
+  (pattern-table (bytevector #x2000))
+  (nametable     (bytevector #x0800))
+  (palette       (bytevector #x0020))
+  (oam           (bytevector #x0100)) ; Sprite RAM/Object Attrib Mem
   (ctrl          0 :type u8)
   (mask          0 :type u8)
   (status        0 :type u8)

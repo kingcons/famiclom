@@ -3,7 +3,7 @@
 (defstruct nes
   "A \"headless\" NES."
   (cpu    (make-cpu))
-  (ram    (make-array #x0800 :element-type 'u8))
+  (ram    (bytevector #x0800))
   (ppu    (make-ppu))
   (apu    (make-apu))
   (mapper nil))

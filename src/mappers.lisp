@@ -44,6 +44,10 @@ NOTE: This macro is unhygienic in its handling of schema."
 
 (defmapper mmc1 (:id 1 :slots ((regs :initform #(#x0c #x00 #x00 #x00)
                                      :accessor mapper-regs)
+                               (prg-ram :initform (bytevector #x2000)
+                                        :accessor mapper-prg-ram)
+                               (chr-ram :initform (bytevector #x2000)
+                                        :accessor mapper-chr-ram)
                                (accum :initform 0 :accessor mapper-accum)
                                (count :initform 0 :accessor mapper-count)
                                (bank :initform 0 :accessor mapper-bank)

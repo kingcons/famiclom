@@ -2,5 +2,5 @@
 
 (defstruct apu
   "The Nintendo Audio Processing Unit."
-  (regs  (make-array #x17 :element-type 'u8)))
+  (regs  (bytevector #x17)))
 
