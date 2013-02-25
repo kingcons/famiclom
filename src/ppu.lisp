@@ -84,17 +84,18 @@
 
 (defstruct ppu
   "The Nintendo Picture Processing Unit."
-  (nametable (make-array #x0800 :element-type 'u8))
-  (palette   (make-array #x0020 :element-type 'u8))
-  (oam       (make-array #x0100 :element-type 'u8)) ; Sprite RAM/Object Attrib Mem
-  (ctrl      0 :type u8)
-  (mask      0 :type u8)
-  (status    0 :type u8)
-  (oam-addr  0 :type u8)
-  (cycles    0 :type fixnum)
-  (scroll    '(:x 0 :y 0 :next :x))
-  (addr      '(:val 0 :next :hi))
-  (meta      '(:scanline 0 :buffer 0 :x 0 :y 0)))
+  (pattern-table (make-array #x2000 :element-type 'u8))
+  (nametable     (make-array #x0800 :element-type 'u8))
+  (palette       (make-array #x0020 :element-type 'u8))
+  (oam           (make-array #x0100 :element-type 'u8)) ; Sprite RAM/Object Attrib Mem
+  (ctrl          0 :type u8)
+  (mask          0 :type u8)
+  (status        0 :type u8)
+  (oam-addr      0 :type u8)
+  (cycles        0 :type fixnum)
+  (scroll        '(:x 0 :y 0 :next :x))
+  (addr          '(:val 0 :next :hi))
+  (meta          '(:scanline 0 :buffer 0 :x 0 :y 0)))
 
 (defmethod initialize-instance :after ((ppu ppu) &key)
   ; TODO: handle variable size nametables in vram, stuff in oam, based on mapper.
@@ -107,12 +108,12 @@
      (if (zerop (logand (ppu-ctrl ppu) ,compare))
          ,then ,else)))
 
-(defctrl x-scroll-offset    #x01 0 256)
-(defctrl y-scroll-offset    #x02 0 240)
-(defctrl vram-step          #x04 1 32)
-(defctrl sprite-table-addr  #x08 0 #x1000)
-(defctrl pattern-table-addr #x10 0 #x1000)
-(defctrl sprite-size        #x20 :8 :16)
+(defctrl x-scroll-offset    #x01  0  256)
+(defctrl y-scroll-offset    #x02  0  240)
+(defctrl vram-step          #x04  1  32)
+(defctrl sprite-table-addr  #x08  0  #x1000)
+(defctrl pattern-table-addr #x10  0  #x1000)
+(defctrl sprite-size        #x20  8  16)
 (defctrl vblank-nmi         #x80 nil t)
 
 (defmacro defmask (name compare)
@@ -178,7 +179,7 @@
                      (logior (wrap-byte (getf meta :x)) x-base))))))))
 
 (defmethod read-vram ((ppu ppu) addr)
-  (cond ((< addr #x2000) (aref (rom-chr (nes-rom *nes*)) addr))
+  (cond ((< addr #x2000) (get-mapper (nes-mapper *nes*) addr))
         ((< addr #x3f00) (aref (ppu-nametable ppu) (logand addr #x07ff)))
         ((< addr #x4000) (aref (ppu-palette ppu) (logand addr #x1f)))
         (t (error "READ: invalid vram address ~a" addr))))

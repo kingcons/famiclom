@@ -2,17 +2,16 @@
 
 ;; Mappers 0-4 cover ~74% of all existing NES titles.
 ;; Support them fully. NROM, MMC1, UNROM, CNROM, MMC3
-;; Or as tenes refers: none, mmc1, konami, vrom, mmc3
+;; Bigtime TENES methods: init, shutdown, read, write.
+;; Also has scanline_start, scanline_end, save_state, restore_state, ex_write, ex_read.
 
-;; How do we handle unsupported mappers? mapper-supported-p?
-
-(defclass mapper () ())
+(defclass mapper () ((rom :initarg :rom :accessor mapper-rom)))
 
 (defgeneric make-mapper (id &rest args)
   (:documentation "Return a mapper instance for the given ID."))
 
 (defgeneric get-mapper (mapper address)
-  (:documentation "Get the value of ADDRESS in MAPPER."))
+  (:documentation "Get the value of ADDRESS from MAPPER."))
 
 (defgeneric set-mapper (mapper address value)
   (:documentation "Set the ADDRESS in MAPPER to VALUE."))
@@ -27,38 +26,57 @@ NOTE: This macro is unhygienic in its handling of schema."
        (apply 'make-instance ',name args))
      ,@(when (getf schema :init)
          `((defmethod initialize-instance :after ((instance ,name) &key)
-             ,(getf schema :init))))
+             (with-accessors ((rom mapper-rom)) instance
+               ,(getf schema :init)))))
      (defmethod get-mapper ((mapper ,name) address)
-       ,(getf schema :getter))
+       (with-accessors ((rom mapper-rom)) mapper
+         ,(getf schema :getter)))
      (defmethod set-mapper ((mapper ,name) address value)
-       ,(getf schema :setter))))
+       (with-accessors ((rom mapper-rom)) mapper
+         ,(getf schema :setter)))))
 
 (defmapper nrom (:id 0)
-  (:getter (let* ((rom (nes-rom *nes*))
-                  (size (getf (rom-metadata rom) :prg-size)))
+  (:init (when (plusp (getf (rom-metadata rom) :chr-size))
+           (setf (ppu-pattern-table (nes-ppu *nes*)) (rom-chr rom)))
+   :getter (let ((size (getf (rom-metadata rom) :prg-size)))
              (aref (rom-prg rom) (logand address (1- size))))
    :setter nil))
-
-;; Bigtime TENES methods: init, shutdown, read, write.
-;; Also has scanline_start, scanline_end, save_state, restore_state, ex_write, ex_read.
-; init: load the 8k chr block into the PPU's vram, clearing vram if no CHR is present.
-; read: Index into PRG block at (addr & prg-size--)
-; many other methods return constants. metadata block could hold them instead
 
 (defmapper mmc1 (:id 1 :slots ((regs :initform #(#x0c #x00 #x00 #x00)
                                      :accessor mapper-regs)
                                (accum :initform 0 :accessor mapper-accum)
-                               (counter :initform 0 :accessor mapper-counter)
+                               (count :initform 0 :accessor mapper-count)
                                (bank :initform 0 :accessor mapper-bank)
-                               (bank-mask :initform 0 :accessor mapper-bank-mask)))
-  (:init (let ((meta (rom-metadata (nes-rom *nes*))))
-           (when (plusp (getf meta :chr-roms))
-             'copy-page-to-vram) ; TODO
-           (when (member (getf meta :prg-roms) '(32 64))
-             (setf (mapper-bank-mask instance) 1)))
+                               (mask :initform 0 :accessor mapper-mask)))
+  (:init (let ((meta (rom-metadata rom)))
+           (when (>= (getf (rom-metadata rom) :prg-roms) 32)
+             (setf (mapper-mask instance) 1))
+           (when (plusp (getf (rom-metadata rom) :chr-size))
+             (setf (ppu-pattern-table (nes-ppu *nes*)) (rom-chr rom))))
    :getter (let ((offset (logand address #x3fff)))
              'do-it) ; TODO
    :setter nil)) ; TODO
+
+(defmethod mirroring ((mapper mmc1))
+  (let ((ctrl-reg (aref (mapper-regs mapper) 0)))
+    (ecase (logand ctrl-reg 3)
+      (0 :lower)
+      (1 :upper)
+      (2 :vertical)
+      (3 :horizontal))))
+
+(defmethod prg-mode ((mapper mmc1))
+  (let ((ctrl-reg (aref (mapper-regs mapper) 0)))
+    (ecase (logand (ash ctrl-reg -2) 3)
+      ((0 1) :switch32k)
+      (2 :fix-first)
+      (3 :fix-last))))
+
+(defmethod chr-mode ((mapper mmc1))
+  (let ((ctrl-reg (aref (mapper-regs mapper) 0)))
+    (if (zerop (logand (ash ctrl-reg -4)))
+        :switch-8k
+        :switch-4k)))
 
 (defmapper unrom (:id 2)
   (:getter nil :setter nil))

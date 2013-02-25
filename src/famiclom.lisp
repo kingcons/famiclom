@@ -6,8 +6,7 @@
   (ram    (make-array #x0800 :element-type 'u8))
   (ppu    (make-ppu))
   (apu    (make-apu))
-  (mapper nil)
-  (rom    nil))
+  (mapper nil))
 
 (defmethod reset :after ((nes nes))
   (let ((ppu (nes-ppu nes)))
@@ -48,8 +47,7 @@
   "Load the given FILE into the NES."
   (let* ((rom (romreader:load-rom file))
          (mapper (getf (rom-metadata rom) :mapper)))
-    (setf (nes-rom *nes*) rom
-          (nes-mapper *nes*) (make-mapper (car mapper)))
+    (setf (nes-mapper *nes*) (make-mapper (car mapper) :rom rom))
     (reset (nes-cpu *nes*))))
 
 (defun play-rom (file)
