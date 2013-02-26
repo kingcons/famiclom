@@ -3,7 +3,7 @@
 ;; Mappers 0-4 cover ~74% of all existing NES titles.
 ;; Support them fully. NROM, MMC1, UNROM, CNROM, MMC3
 ;; Bigtime TENES methods: init, shutdown, read, write.
-;; Also has scanline_start, scanline_end, save_state, restore_state, ex_write, ex_read.
+;; Also has scanline_start, scanline_end, save_state, restore_state.
 
 (defclass mapper () ((rom :initarg :rom :accessor mapper-rom)))
 
@@ -42,8 +42,10 @@ NOTE: This macro is unhygienic in its handling of schema."
              (aref (rom-prg rom) (logand address (1- size))))
    :setter nil))
 
-(defmapper mmc1 (:id 1 :slots ((regs :initform #(#x0c #x00 #x00 #x00)
-                                     :accessor mapper-regs)
+(defmapper mmc1 (:id 1 :slots ((ctrl-reg :initform #x0c :accessor mapper-ctrl)
+                               (chr1-reg :initform #x00 :accessor mapper-chr1)
+                               (chr2-reg :initform #x00 :accessor mapper-chr2)
+                               (prg-bank :initform #x00 :accessor mapper-prg)
                                (prg-ram :initform (bytevector #x2000)
                                         :accessor mapper-prg-ram)
                                (chr-ram :initform (bytevector #x2000)
@@ -57,30 +59,51 @@ NOTE: This macro is unhygienic in its handling of schema."
              (setf (mapper-mask instance) 1))
            (when (plusp (getf (rom-metadata rom) :chr-size))
              (setf (ppu-pattern-table (nes-ppu *nes*)) (rom-chr rom))))
-   :getter (let ((offset (logand address #x3fff)))
-             'do-it) ; TODO
-   :setter nil)) ; TODO
+   :getter (with-accessors ((prg mapper-prg)) mapper
+             (flet ((offset (x) (logior (* x #x4000) (logand addr #x3fff))))
+               (if (< addr #xc000)
+                   (let ((bank (ecase (prg-mode mapper)
+                                 (:switch32k (logand prg #xfe))
+                                 (:fix-first 0)
+                                 (:fix-last prg))))
+                     (aref (rom-prg rom) (offset bank)))
+                   (let* ((meta (rom-metadata rom))
+                          (bank (ecase (prg-mode mapper)
+                                  (:switch32k (logior (logand prg #xfe) 1))
+                                  (:fix-first prg)
+                                  (:fix-last (1- (getf meta :prg-size))))))
+                     (aref (rom-prg rom) (offset bank))))))
+   :setter (with-accessors ((count mapper-count)
+                            (accum mapper-accum)
+                            (ctrl mapper-ctrl)) mapper
+             (unless (logbitp 7 value)
+               (return (setf count 0 accum 0 ctrl (logior ctrl #x0c))))
+             (setf accum (logior accum (ash (logand value 1) count)))
+             (incf count)
+             (when (= count 5)
+               (cond ((< addr #x9fff) (setf ctrl accum))
+                     ((< addr #xbfff) (setf (mapper-chr1 mapper) accum))
+                     ((< addr #xdfff) (setf (mapper-chr2 mapper) accum))
+                     (t (setf (mapper-prg mapper) accum)))
+               (setf count 0 accum 0)))))
 
 (defmethod mirroring ((mapper mmc1))
-  (let ((ctrl-reg (aref (mapper-regs mapper) 0)))
-    (ecase (logand ctrl-reg 3)
-      (0 :lower)
-      (1 :upper)
-      (2 :vertical)
-      (3 :horizontal))))
+  (ecase (logand (mapper-ctrl mapper) 3)
+    (0 :lower)
+    (1 :upper)
+    (2 :vertical)
+    (3 :horizontal)))
 
 (defmethod prg-mode ((mapper mmc1))
-  (let ((ctrl-reg (aref (mapper-regs mapper) 0)))
-    (ecase (logand (ash ctrl-reg -2) 3)
-      ((0 1) :switch32k)
-      (2 :fix-first)
-      (3 :fix-last))))
+  (ecase (logand (ash (mapper-ctrl mapper) -2) 3)
+    ((0 1) :switch32k)
+    (2 :fix-first)
+    (3 :fix-last)))
 
 (defmethod chr-mode ((mapper mmc1))
-  (let ((ctrl-reg (aref (mapper-regs mapper) 0)))
-    (if (zerop (logand (ash ctrl-reg -4)))
-        :switch-8k
-        :switch-4k)))
+  (if (zerop (logand (ash (mapper-ctrl mapper) -4)))
+      :switch-8k
+      :switch-4k))
 
 (defmapper unrom (:id 2)
   (:getter nil :setter nil))
