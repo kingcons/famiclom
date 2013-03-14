@@ -2,8 +2,11 @@
 
 ;;;; TODO: Understand the magic of PPUs. A nightmare of state.
 
-(defvar *resolution* '(:width 256 :height 240) "NES output resolution.")
-(defvar *frame* (bytevector 184320) "A single frame to blit.")
+(defconstant +width+ 256)
+(defconstant +height+ 240)
+
+(defvar *frame* (bytevector 184320)
+  "A single frame to blit. 256*240*3 or width*height*rgb.")
 
 (defvar *color-palette*
   #(#x7C #x7C #x7C #x00 #x00 #xFC #x00 #x00 #xBC #x44 #x28 #xBC #x94 #x00 #x84 #xA8
@@ -43,8 +46,8 @@
     (if (< scanline (sprite-y sprite))
         nil
         (ecase (sprite-size ppu)
-          (:8 (< scanline (+ (sprite-y sprite) 8)))
-          (:16 (< scanline (+ (sprite-y sprite) 16)))))))
+          (8 (< scanline (+ (sprite-y sprite) 8)))
+          (16 (< scanline (+ (sprite-y sprite) 16)))))))
 
 (defmethod in-bounding-box ((sprite sprite) ppu x &optional y)
   (declare (ignore y)) ; TODO: we're using scanline for y. don't panic.
@@ -55,8 +58,8 @@
 (defmethod tiles ((sprite sprite) ppu)
   (let ((base (pattern-table-addr ppu)))
     (ecase (sprite-size ppu)
-      (:8 (logior (sprite-tile-index sprite) base))
-      (:16 (let* ((initial (sprite-tile-index sprite))
+      (8 (logior (sprite-tile-index sprite) base))
+      (16 (let* ((initial (sprite-tile-index sprite))
                   (first (logandc2 initial 1)))
              (when (plusp (logand initial 1))
                (incf first #x1000))
@@ -179,7 +182,7 @@
                      (logior (wrap-byte (getf meta :x)) x-base))))))))
 
 (defmethod read-vram ((ppu ppu) addr)
-  (cond ((< addr #x2000) (get-mapper (nes-mapper *nes*) addr))
+  (cond ((< addr #x2000) (aref (ppu-pattern-table ppu) addr))
         ((< addr #x3f00) (aref (ppu-nametable ppu) (logand addr #x07ff)))
         ((< addr #x4000) (aref (ppu-palette ppu) (logand addr #x1f)))
         (t (error "READ: invalid vram address ~a" addr))))
@@ -225,7 +228,7 @@
     (+ (ash red 16) (ash green 8) blue)))
 
 (defun put-pixel (x y color)
-  (let ((base (+ x (* y (getf *resolution* :width)))))
+  (let ((base (+ x (* y +width+))))
     (setf (aref *frame* (+ 0 (* 3 base))) (color-r color)
           (aref *frame* (+ 1 (* 3 base))) (color-g color)
           (aref *frame* (+ 2 (* 3 base))) (color-b color))))
@@ -335,7 +338,7 @@
   (:method ((ppu ppu)) ;; TODO: Mirroring. Scrolling?
     (let* ((bd-index (logand (read-vram ppu #x3f00) #x3f))
            (bd-color (get-color bd-index)))
-      (dotimes (x (getf *resolution* :width))
+      (dotimes (x +width+)
         (let* ((bg-color (when (show-bg ppu)
                            (get-bg-pixel ppu x)))
                (sprite-color (when (show-sprites ppu)
@@ -363,12 +366,12 @@
 
 (defgeneric ppu-step (ppu to-cycle)
   (:method ((ppu ppu) to-cycle)
-    (let ((cycles-per-scanline 124))
+    (let ((cycles-per-scanline 114))
       (loop with result = '(:vblank-nmi nil :new-frame nil)
          for next-scanline = (+ (ppu-cycles ppu) cycles-per-scanline)
          until (> next-scanline to-cycle)
          do (progn
-              (when (< (getf (ppu-meta ppu) :scanline) (getf *resolution* :height))
+              (when (< (getf (ppu-meta ppu) :scanline) +height+)
                 (render-scanline ppu))
               (incf (getf (ppu-meta ppu) :scanline))
               (case (getf (ppu-meta ppu) :scanline)
