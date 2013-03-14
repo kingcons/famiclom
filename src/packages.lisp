@@ -5,6 +5,7 @@
                       #:make-cpu
                       #:cpu
                       #:6502-step
+                      #:current-instruction
                       #:reset
                       #:u8
                       #:bytevector

@@ -8,14 +8,8 @@
   (apu    (make-apu))
   (mapper nil))
 
-(defmethod reset :after ((nes nes))
-  (let ((ppu (nes-ppu nes)))
-    (setf (ppu-scroll ppu) '(:x 0 :y 0 :next :x)
-          (ppu-addr ppu) '(:val 0 :next :hi)
-          (ppu-meta ppu) '(:scanline 0 :buffer 0 :x 0 :y 0))))
-
 (defvar *nes* (make-nes))
-(defparameter *debug* t)
+(defparameter *debug* nil)
 
 (defun get-byte-ram% (addr)
   (aref (nes-ram *nes*) (logand addr #x7ff)))
@@ -40,8 +34,7 @@
              collecting (6502:get-byte i)) 'vector))
 
 (defmethod 6502-step :before ((cpu cpu) opcode)
-  (when *debug*
-    (6502::disasm-ins (6502:immediate cpu))))
+  (when *debug* (current-instruction cpu t)))
 
 (defun load-rom (file)
   "Load the given FILE into the NES."
@@ -67,5 +60,6 @@
              (6502:nmi cpu)
              (setf (getf p-step :vblank-nmi) nil))
            (when (getf p-step :new-frame)
+             (format t "DOING THE DRAWING STUFF!~%")
              (sdl:update-display *screen*)
              (setf (getf p-step :new-frame) nil))))))
