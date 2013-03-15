@@ -38,8 +38,10 @@
   (scroll-next   :x  :type keyword)
   (addr          0   :type u16)
   (addr-next     :hi :type keyword)
+  (buffer        0   :type u8)
+  (scanline      0   :type u16)
   (cycles        0   :type fixnum)
-  (meta          '(:scanline 0 :buffer 0 :x 0 :y 0)))
+  (meta          '(:x 0 :y 0)))
 
 ;;;; PPU Register methods
 
@@ -140,7 +142,7 @@
       :below))
 
 (defmethod on-scanline ((sprite sprite) (ppu ppu))
-  (let ((scanline (getf (ppu-meta ppu) :scanline)))
+  (with-accessors ((scanline ppu-scanline)) ppu
     (if (< scanline (sprite-y sprite))
         nil
         (ecase (sprite-size ppu)
@@ -232,8 +234,8 @@
     (incf (ppu-addr ppu) (vram-step ppu))
     (if (< addr #x3f00)
         (prog1
-            (getf (ppu-meta ppu) :buffer)
-          (setf (getf (ppu-meta ppu) :buffer) result))
+            (ppu-buffer ppu)
+          (setf (ppu-buffer ppu) result))
         result)))
 
 ;;;; Misc Helpers
@@ -282,7 +284,7 @@
 
 (defun get-bg-pixel (ppu x)
   (let* ((x (+ (getf (ppu-meta ppu) :x) x))
-         (y (+ (getf (ppu-meta ppu) :y) (getf (ppu-meta ppu) :scanline)))
+         (y (+ (getf (ppu-meta ppu) :y) (ppu-scanline ppu)))
          (base (nametable-addr (round x 8) (round y 8))) ; TODO: Use floor instead?
          (tile (read-vram ppu (apply '+ (* 32 (first base)) (rest base))))
          (color (get-pixel-color ppu 'foo tile (mod x 8) (mod y 8))))
@@ -315,7 +317,7 @@
             (etypecase tile
               (fixnum
                (let ((x (- x (sprite-x sprite)))
-                     (y (- (getf (ppu-meta ppu) :scanline) (sprite-y sprite))))
+                     (y (- (ppu-scanline ppu) (sprite-y sprite))))
                  (when (flip-h sprite) (setf x (- 7 x)))
                  (when (flip-v sprite) (setf y (- 7 y)))
                  (setf pattern-color (get-pixel-color ppu :sprite tile x y))))
@@ -373,9 +375,9 @@
                             (bg-color bg-color)
                             (sprite-color sprite-color)
                             (t bd-color))))
-          ;(put-pixel x (getf (ppu-meta ppu) :scanline) color)
+          ;(put-pixel x (ppu-scanline ppu) color)
           (sdl:with-pixel (pixels (sdl:fp *screen*))
-            (sdl:write-pixel pixels x (getf (ppu-meta ppu) :scanline) color)))))))
+            (sdl:write-pixel pixels x (ppu-scanline ppu) color)))))))
 
 (defgeneric start-vblank (ppu)
   (:method ((ppu ppu))
@@ -385,22 +387,23 @@
 
 (defgeneric new-frame (ppu)
   (:method ((ppu ppu))
-    (setf (getf (ppu-meta ppu) :scanline) 0)
+    (setf (ppu-scanline ppu) 0)
     (set-in-vblank ppu 0)
     t))
 
 (defgeneric ppu-step (ppu to-cycle)
   (:method ((ppu ppu) to-cycle)
-    (let ((cycles-per-scanline 114))
-      (loop with result = '(:vblank-nmi nil :new-frame nil)
-         for next-scanline = (+ (ppu-cycles ppu) cycles-per-scanline)
-         until (> next-scanline to-cycle)
-         do (progn
-              (when (< (getf (ppu-meta ppu) :scanline) +height+)
-                (render-scanline ppu))
-              (incf (getf (ppu-meta ppu) :scanline))
-              (case (getf (ppu-meta ppu) :scanline)
-                (241 (setf (getf result :vblank-nmi) (start-vblank ppu)))
-                (261 (setf (getf result :new-frame) (new-frame ppu))))
-              (incf (ppu-cycles ppu) cycles-per-scanline))
-         finally (return result)))))
+    (with-accessors ((scanline ppu-scanline)) ppu
+      (let ((cycles-per-scanline 114))
+        (loop with result = '(:vblank-nmi nil :new-frame nil)
+           for next-scanline = (+ (ppu-cycles ppu) cycles-per-scanline)
+           until (> next-scanline to-cycle)
+           do (progn
+                (when (< scanline +height+)
+                  (render-scanline ppu))
+                (incf scanline)
+                (case scanline
+                  (241 (setf (getf result :vblank-nmi) (start-vblank ppu)))
+                  (261 (setf (getf result :new-frame) (new-frame ppu))))
+                (incf (ppu-cycles ppu) cycles-per-scanline))
+           finally (return result))))))
