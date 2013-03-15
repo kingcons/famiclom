@@ -1,7 +1,5 @@
 (in-package :famiclom)
 
-;;;; TODO: Understand the magic of PPUs. A nightmare of state.
-
 (defconstant +width+ 256)
 (defconstant +height+ 240)
 
@@ -23,66 +21,6 @@
     #xB8 #xB8 #xF8 #xD8 #x00 #xFC #xFC #xF8 #xD8 #xF8 #x00 #x00 #x00 #x00 #x00 #x00)
   "The color palette used by the graphics card.")
 
-;;;; Sprites: How do they work?
-
-(declaim (inline make-sprite))
-(defstruct sprite
-  (x           0 :type u8)
-  (y           0 :type u8)
-  (tile-index  0 :type u8)
-  (attribute   0 :type u8))
-
-(defmethod palette ((sprite sprite)) (+ 4 (logand (sprite-attribute sprite) 3)))
-(defmethod flip-h ((sprite sprite)) (plusp (logand (sprite-attribute sprite) #x40)))
-(defmethod flip-v ((sprite sprite)) (plusp (logand (sprite-attribute sprite) #x80)))
-
-(defmethod priority ((sprite sprite))
-  (if (zerop (logand (sprite-attribute sprite) #x20))
-      :above
-      :below))
-
-(defmethod on-scanline ((sprite sprite) ppu)
-  (let ((scanline (getf (ppu-meta ppu) :scanline)))
-    (if (< scanline (sprite-y sprite))
-        nil
-        (ecase (sprite-size ppu)
-          (8 (< scanline (+ (sprite-y sprite) 8)))
-          (16 (< scanline (+ (sprite-y sprite) 16)))))))
-
-(defmethod in-bounding-box ((sprite sprite) ppu x &optional y)
-  (declare (ignore y)) ; TODO: we're using scanline for y. don't panic.
-  (and (>= x (sprite-x sprite))
-       (< x (+ (sprite-x sprite) 8))
-       (on-scanline sprite ppu)))
-
-(defmethod tiles ((sprite sprite) ppu)
-  (let ((base (pattern-table-addr ppu)))
-    (ecase (sprite-size ppu)
-      (8 (logior (sprite-tile-index sprite) base))
-      (16 (let* ((initial (sprite-tile-index sprite))
-                  (first (logandc2 initial 1)))
-             (when (plusp (logand initial 1))
-               (incf first #x1000))
-             (list first (1+ first)))))))
-
-(defun from-oam (oam index)
-  (make-sprite :x          (+ 3 (* 4 (aref oam index)))
-               :y          (+ 0 (* 4 (aref oam index)))
-               :tile-index (+ 1 (* 4 (aref oam index)))
-               :attribute  (+ 2 (* 4 (aref oam index)))))
-
-(defun get-visible-sprites (ppu)
-  ; TODO: Did I mistranslate semantics here?
-  (with-accessors ((oam ppu-oam)) ppu
-    (loop with count = 0 with result = (make-array 8 :initial-element nil)
-       for i from 0 to 64 for sprite = (from-oam oam i)
-       when (on-scanline sprite ppu)
-       do (if (< count 8)
-              (setf (aref result count) i
-                    count (1+ count))
-              (set-sprite-overflow ppu 1))
-       finally (return result))))
-
 ;;;; Graphics Cards: How do they work?
 
 (defstruct ppu
@@ -103,13 +41,7 @@
   (cycles        0   :type fixnum)
   (meta          '(:scanline 0 :buffer 0 :x 0 :y 0)))
 
-(defun wrap-nametable (val)
-  "Wrap VAL to index into the PPU nametable."
-  (logand val #x07ff))
-
-(defun wrap-palette (val)
-  "Wrap VAL to index into the PPU palette."
-  (logand val #x1f))
+;;;; PPU Register methods
 
 (defmacro defctrl (name compare then else)
   "Define PPU control register methods." ; TODO: elaborate
@@ -117,13 +49,13 @@
      (if (zerop (logand (ppu-ctrl ppu) ,compare))
          ,then ,else)))
 
-(defctrl x-scroll-offset    #x01  0  256)
-(defctrl y-scroll-offset    #x02  0  240)
-(defctrl vram-step          #x04  1  32)
-(defctrl sprite-table-addr  #x08  0  #x1000)
-(defctrl pattern-table-addr #x10  0  #x1000)
-(defctrl sprite-size        #x20  8  16)
-(defctrl vblank-nmi         #x80 nil t)
+(defctrl x-scroll-offset      #x01  0  256)
+(defctrl y-scroll-offset      #x02  0  240)
+(defctrl vram-step            #x04  1  32)
+(defctrl sprite-pattern-addr  #x08  0  #x1000)
+(defctrl bg-pattern-addr      #x10  0  #x1000)
+(defctrl sprite-size          #x20  8  16)
+(defctrl vblank-nmi           #x80 nil t)
 
 (defmacro defmask (name compare)
   "Define PPU mask register methods." ; TODO: elaborate
@@ -147,6 +79,109 @@
 (defstatus set-sprite-overflow 5)
 (defstatus set-sprite-zero-hit 6)
 (defstatus set-in-vblank       7)
+
+;;;; Helpers
+
+(defun wrap-nametable (val)
+  "Wrap VAL to index into the PPU nametable."
+  (logand val #x07ff))
+
+(defun wrap-palette (val)
+  "Wrap VAL to index into the PPU palette."
+  (logand val #x1f))
+
+;;;; VRAM Memory Map
+
+(defmethod read-vram ((ppu ppu) addr)
+  (cond ((< addr #x2000) (aref (ppu-pattern-table ppu) addr))
+        ((< addr #x3f00) (aref (ppu-nametable ppu) (wrap-nametable addr)))
+        ((< addr #x4000) (aref (ppu-palette ppu) (wrap-palette addr)))
+        (t (error "READ: invalid vram address ~a" addr))))
+
+(defmethod store-vram ((ppu ppu) addr val)
+  (cond ((< addr #x2000) (setf (aref (ppu-pattern-table ppu) addr) val))
+        ((< addr #x3f00) (let ((wrapped (wrap-nametable addr)))
+                           (setf (aref (ppu-nametable ppu) wrapped) val)))
+        ((< addr #x4000) (let ((wrapped (wrap-palette addr)))
+                           (when (= wrapped #x10) (setf wrapped #x00))
+                           (setf (aref (ppu-palette ppu) wrapped) val)))
+        (t (error "WRITE: invalid vram address ~a" addr)))
+  (incf (ppu-addr ppu) (vram-step ppu)))
+
+;;;; Sprite RAM/Object Attribute Memory (OAM)
+
+(defmethod read-oam ((ppu ppu) addr)
+  (aref (ppu-oam ppu) addr))
+
+(defmethod store-oam ((ppu ppu) val)
+  (with-accessors ((addr ppu-oam-addr)) ppu
+    (setf (aref (ppu-oam ppu) addr) val)
+    (incf addr)))
+
+(declaim (inline make-sprite))
+(defstruct sprite
+  (x           0 :type u8)
+  (y           0 :type u8)
+  (tile-index  0 :type u8)
+  (attribute   0 :type u8))
+
+(defmethod palette ((sprite sprite))
+  (+ 4 (logand (sprite-attribute sprite) 3)))
+
+(defmethod flip-h ((sprite sprite))
+  (not (zerop (logand (sprite-attribute sprite) #x40))))
+
+(defmethod flip-v ((sprite sprite))
+  (not (zerop (logand (sprite-attribute sprite) #x80))))
+
+(defmethod priority ((sprite sprite))
+  (if (zerop (logand (sprite-attribute sprite) #x20))
+      :above
+      :below))
+
+(defmethod on-scanline ((sprite sprite) (ppu ppu))
+  (let ((scanline (getf (ppu-meta ppu) :scanline)))
+    (if (< scanline (sprite-y sprite))
+        nil
+        (ecase (sprite-size ppu)
+          (08 (< scanline (+ (sprite-y sprite) 08)))
+          (16 (< scanline (+ (sprite-y sprite) 16)))))))
+
+(defmethod in-bounding-box ((sprite sprite) (ppu ppu) x)
+  ; KLUDGE: Y is assumed to be the current scanline.
+  (and (>= x (sprite-x sprite))
+       (< x (+ (sprite-x sprite) 8))
+       (on-scanline sprite ppu)))
+
+(defmethod tiles ((sprite sprite) (ppu ppu))
+  (let ((base (sprite-pattern-addr ppu)))
+    (ecase (sprite-size ppu)
+      (8 (logior (sprite-tile-index sprite) base))
+      (16 (let* ((initial (sprite-tile-index sprite))
+                 (tile (logandc2 initial 1)))
+            (unless (zerop (logand initial 1))
+              (incf tile #x1000))
+            (list tile (1+ tile)))))))
+
+;;;; Main PPU Methods - *UNTESTED*
+
+(defun from-oam (oam index)
+  (make-sprite :y          (+ 0 (* 4 (aref oam index)))
+               :tile-index (+ 1 (* 4 (aref oam index)))
+               :attribute  (+ 2 (* 4 (aref oam index)))
+               :x          (+ 3 (* 4 (aref oam index)))))
+
+(defun get-visible-sprites (ppu)
+  ; TODO: Did I mistranslate semantics here?
+  (with-accessors ((oam ppu-oam)) ppu
+    (loop with count = 0 with result = (make-array 8 :initial-element nil)
+       for i from 0 to 64 for sprite = (from-oam oam i)
+       when (on-scanline sprite ppu)
+       do (if (< count 8)
+              (setf (aref result count) i
+                    count (1+ count))
+              (set-sprite-overflow ppu 1))
+       finally (return result))))
 
 (defmethod read-status ((ppu ppu))
   (setf (ppu-scroll-next ppu) :x
@@ -191,27 +226,6 @@
                           (x-base (if (< initial #x400) 0 256)))
                      (logior (wrap-byte (getf meta :x)) x-base))))))))
 
-(defmethod read-vram ((ppu ppu) addr)
-  (cond ((< addr #x2000) (aref (ppu-pattern-table ppu) addr))
-        ((< addr #x3f00) (aref (ppu-nametable ppu) (wrap-nametable addr)))
-        ((< addr #x4000) (aref (ppu-palette ppu) (wrap-palette addr)))
-        (t (error "READ: invalid vram address ~a" addr))))
-
-(defmethod store-vram ((ppu ppu) addr val)
-  (cond ((< addr #x2000) (setf (aref (ppu-pattern-table ppu) addr) val))
-        ((< addr #x3f00) (let ((wrapped (wrap-nametable addr)))
-                           (setf (aref (ppu-nametable ppu) wrapped) val)))
-        ((< addr #x4000) (let ((wrapped (wrap-palette addr)))
-                           (when (= wrapped #x10) (setf wrapped #x00))
-                           (setf (aref (ppu-palette ppu) wrapped) val)))
-        (t (error "WRITE: invalid vram address ~a" addr)))
-  (incf (ppu-addr ppu) (vram-step ppu)))
-
-(defmethod store-oam ((ppu ppu) val)
-  (with-accessors ((addr ppu-oam-addr)) ppu
-    (setf (aref (ppu-oam ppu) addr) val)
-    (incf addr)))
-
 (defun buffered-read (ppu)
   (let* ((addr (ppu-addr ppu))
          (result (read-vram ppu addr)))
@@ -247,8 +261,8 @@
 (defun get-pixel-color (ppu kind tile x y)
   (let ((offset (+ y (ash tile 4))))
     (case kind
-      (:bg (incf offset (pattern-table-addr ppu)))
-      (:sprite (incf offset (sprite-table-addr ppu))))
+      (:bg (incf offset (bg-pattern-addr ppu)))
+      (:sprite (incf offset (sprite-pattern-addr ppu))))
     (let* ((plane-0 (read-vram ppu offset))
            (plane-1 (read-vram ppu (+ offset 8)))
            (bit-0 (logand (ash plane-0 (- (mod x 8) 7)) 1))
