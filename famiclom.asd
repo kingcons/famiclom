@@ -5,7 +5,7 @@
   :license "BSD"
   :author "Brit Butler <redline6561@gmail.com>"
   :pathname "src/"
-  :depends-on (:cl-6502 :romreader :lispbuilder-sdl)
+  :depends-on (:cl-6502 :romreader :static-vectors :lispbuilder-sdl)
   :serial t
   :components ((:file "packages")
                (:file "nestest")

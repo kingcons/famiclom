@@ -1,6 +1,7 @@
 (defpackage :famiclom
   (:use :cl)
   (:import-from :famiclom-conf #:app-path)
+  (:import-from :static-vectors #:static-vector-pointer)
   (:import-from :6502 #:wrap-byte
                       #:make-cpu
                       #:cpu

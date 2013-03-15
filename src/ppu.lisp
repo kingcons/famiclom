@@ -3,6 +3,9 @@
 (defconstant +width+ 256)
 (defconstant +height+ 240)
 
+(defvar *frame* (static-vectors:make-static-vector 184320)
+  "A single frame to blit. 256*240*3 or width*height*rgb.")
+
 (defvar *color-palette*
   #(#x7C #x7C #x7C #x00 #x00 #xFC #x00 #x00 #xBC #x44 #x28 #xBC #x94 #x00 #x84 #xA8
     #x00 #x20 #xA8 #x10 #x00 #x88 #x14 #x00 #x50 #x30 #x00 #x00 #x78 #x00 #x00 #x68
@@ -206,14 +209,25 @@
 
 ;;;; Colors
 
-(declaim (inline get-color))
+(declaim (inline make-color get-color put-pixel))
+(defstruct color
+  (r 0 :type u8)
+  (g 0 :type u8)
+  (b 0 :type u8))
+
 (defun get-color (ppu vram-index)
   (let* ((color-index (logand (read-vram ppu vram-index) #x3f))
          (base (* color-index 3))
          (red   (aref *color-palette* (+ 2 base)))
          (green (aref *color-palette* (+ 1 base)))
          (blue  (aref *color-palette* (+ 0 base))))
-    (logior (ash red 16) (ash green 8) blue)))
+    (make-color :r red :g green :b blue)))
+
+(defun put-pixel (x y color)
+  (let ((base (* 3 (+ x (* y +width+)))))
+    (setf (aref *frame* (+ base 0)) (color-r color)
+          (aref *frame* (+ base 1)) (color-g color)
+          (aref *frame* (+ base 2)) (color-b color))))
 
 (defun get-pattern-color (ppu kind tile x y)
   (let ((offset (+ y (ash tile 4))))
@@ -364,8 +378,7 @@
                (sprite-color (when (show-sprites ppu)
                                (get-sprite-pixel ppu x bg-color)))
                (color (pick-color bg-color sprite-color bd-color)))
-          (sdl:with-pixel (screen (sdl:fp *screen*))
-            (sdl:write-pixel screen x (ppu-scanline ppu) color)))))))
+          (put-pixel x (ppu-scanline ppu) color))))))
 
 (defun start-vblank (ppu)
   (set-in-vblank ppu 1)
