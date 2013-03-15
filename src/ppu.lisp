@@ -135,7 +135,7 @@
         ((< addr #x4000) (aref (ppu-palette ppu) (wrap-palette addr)))
         (t (error "READ: invalid vram address ~a" addr))))
 
-(defmethod store-vram ((ppu ppu) addr val)
+(defmethod write-vram ((ppu ppu) addr val)
   (cond ((< addr #x2000) (setf (aref (ppu-pattern-table ppu) addr) val))
         ((< addr #x3f00) (let ((wrapped (wrap-nametable addr)))
                            (setf (aref (ppu-nametable ppu) wrapped) val)))
@@ -150,7 +150,7 @@
 (defmethod read-oam ((ppu ppu) addr)
   (aref (ppu-oam ppu) addr))
 
-(defmethod store-oam ((ppu ppu) val)
+(defmethod write-oam ((ppu ppu) val)
   (with-accessors ((addr ppu-oam-addr)) ppu
     (setf (aref (ppu-oam ppu) addr) val)
     (incf addr)))
@@ -354,10 +354,10 @@
       (1 (setf (ppu-mask ppu) new-val))
       (2 nil)
       (3 (setf (ppu-oam-addr ppu) new-val))
-      (4 (store-oam ppu new-val))
+      (4 (write-oam ppu new-val))
       (5 (update-scroll ppu new-val))
       (6 (update-addr ppu new-val))
-      (7 (store-vram ppu (ppu-addr ppu) new-val)))))
+      (7 (write-vram ppu (ppu-addr ppu) new-val)))))
 
 (defgeneric render-scanline (ppu)
   (:method ((ppu ppu)) ;; TODO: Mirroring. Scrolling?
