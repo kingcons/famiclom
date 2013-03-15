@@ -3,9 +3,6 @@
 (defconstant +width+ 256)
 (defconstant +height+ 240)
 
-(defvar *frame* (bytevector 184320)
-  "A single frame to blit. 256*240*3 or width*height*rgb.")
-
 (defvar *color-palette*
   #(#x7C #x7C #x7C #x00 #x00 #xFC #x00 #x00 #xBC #x44 #x28 #xBC #x94 #x00 #x84 #xA8
     #x00 #x20 #xA8 #x10 #x00 #x88 #x14 #x00 #x50 #x30 #x00 #x00 #x78 #x00 #x00 #x68
@@ -207,20 +204,14 @@
 
 ;;;; Colors
 
-(declaim (inline get-color put-pixel))
+(declaim (inline get-color))
 (defmethod get-color ((ppu ppu) vram-index)
   (let* ((color-index (logand (read-vram ppu vram-index) #x3f))
          (base (* color-index 3))
          (red   (aref *color-palette* (+ 2 base)))
          (green (aref *color-palette* (+ 1 base)))
          (blue  (aref *color-palette* (+ 0 base))))
-    (+ (ash red 16) (ash green 8) blue)))
-
-(defun put-pixel (x y color)
-  (let ((base (* 3 (+ x (* y +width+)))))
-    (setf (aref *frame* (+ base 0)) (color-r color)
-          (aref *frame* (+ base 1)) (color-g color)
-          (aref *frame* (+ base 2)) (color-b color))))
+    (logior (ash red 16) (ash green 8) blue)))
 
 (defmethod get-pattern-color ((ppu ppu) kind tile x y)
   (let ((offset (+ y (ash tile 4))))
@@ -333,8 +324,7 @@
          (result (read-vram ppu addr)))
     (incf (ppu-addr ppu) (vram-step ppu))
     (if (< addr #x3f00)
-        (prog1
-            (ppu-buffer ppu)
+        (prog1 (ppu-buffer ppu)
           (setf (ppu-buffer ppu) result))
         result)))
 
@@ -371,21 +361,18 @@
                (sprite-color (when (show-sprites ppu)
                                (get-sprite-pixel ppu x bg-color)))
                (color (pick-color bg-color sprite-color bd-color)))
-          ;(put-pixel x (ppu-scanline ppu) color)
-          (sdl:with-pixel (pixels (sdl:fp *screen*))
-            (sdl:write-pixel pixels x (ppu-scanline ppu) color)))))))
+          (sdl:with-pixel (screen (sdl:fp *screen*))
+            (sdl:write-pixel screen x (ppu-scanline ppu) color)))))))
 
-(defgeneric start-vblank (ppu)
-  (:method ((ppu ppu))
-    (set-in-vblank ppu 1)
-    (set-sprite-zero-hit ppu 0)
-    (when (vblank-nmi ppu) t)))
+(defun start-vblank (ppu)
+  (set-in-vblank ppu 1)
+  (set-sprite-zero-hit ppu 0)
+  (when (vblank-nmi ppu) t))
 
-(defgeneric new-frame (ppu)
-  (:method ((ppu ppu))
-    (setf (ppu-scanline ppu) 0)
-    (set-in-vblank ppu 0)
-    t))
+(defun new-frame (ppu)
+  (setf (ppu-scanline ppu) 0)
+  (set-in-vblank ppu 0)
+  t)
 
 (defgeneric ppu-step (ppu to-cycle)
   (:method ((ppu ppu) to-cycle)
