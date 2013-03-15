@@ -45,8 +45,8 @@
 
 (defun play-rom (file)
   (load-rom file)
-  (sdl:with-init ()
-    (setf *screen* (sdl:window 256 240 :double-buffer t :sw t))
+  (sdl:with-init (sdl:sdl-init-video sdl:sdl-init-audio)
+    (setf *screen* (sdl:window 256 240 :bpp 24 :sw t))
     (run)))
 
 (defun run ()
@@ -56,10 +56,8 @@
          (let ((c-step (6502-step cpu (6502:get-byte (6502:immediate cpu))))
                (p-step (ppu-step ppu (6502:cpu-cc cpu))))
            (when (getf p-step :vblank-nmi)
-             (format t "DOING THE NMI STUFF!~%")
              (6502:nmi cpu)
              (setf (getf p-step :vblank-nmi) nil))
            (when (getf p-step :new-frame)
-             (format t "DOING THE DRAWING STUFF!~%")
              (sdl:update-display *screen*)
              (setf (getf p-step :new-frame) nil))))))
