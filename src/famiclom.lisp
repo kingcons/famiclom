@@ -8,6 +8,7 @@
   (apu    (make-apu))
   (mapper nil))
 
+(defconstant +cycles-per-second+ (* 1.79 (expt 2 20)))
 (defvar *nes* (make-nes))
 (defparameter *debug* nil)
 

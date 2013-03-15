@@ -213,7 +213,7 @@
          (blue  (aref *color-palette* (+ 0 base))))
     (logior (ash red 16) (ash green 8) blue)))
 
-(defmethod get-pattern-color ((ppu ppu) kind tile x y)
+(defun get-pattern-color (ppu kind tile x y)
   (let ((offset (+ y (ash tile 4))))
     (case kind
       (:bg (incf offset (bg-pattern-addr ppu)))
@@ -245,14 +245,14 @@
                      (t #x2000))))
     (list base (mod x 32) (mod y 30))))
 
-(defmethod get-sprite ((ppu ppu) index)
+(defun get-sprite (ppu index)
   (let ((base (* index 4)))
     (make-sprite :y          (1+ (read-oam ppu (+ 0 base)))
                  :tile-index (read-oam ppu (+ 1 base))
                  :attribute  (read-oam ppu (+ 2 base))
                  :x          (read-oam ppu (+ 3 base)))))
 
-(defmethod get-attrib ((ppu ppu) base x y)
+(defun get-attrib (ppu base x y)
   (flet ((magic (x y) ; TODO: Why? Rename after enlightenment.
            (+ (* (round y 4) 8)
               (round x 4))))
@@ -264,7 +264,7 @@
             (left (logand (ash attr-byte -4) #x03))
             (t (logand (ash attr-byte -6) #x03))))))
 
-(defmethod get-visible-sprites ((ppu ppu))
+(defun get-visible-sprites (ppu)
   (loop with count = 0 with result = (make-list 8 :initial-element nil)
      for i from 0 to 63 for sprite = (get-sprite ppu i)
      when (on-scanline sprite ppu)
@@ -276,7 +276,7 @@
               (return result)))
      finally (return result)))
 
-(defmethod get-bg-pixel ((ppu ppu) x)
+(defun get-bg-pixel (ppu x)
   (let* ((x (+ (getf (ppu-meta ppu) :x) x))
          (y (+ (getf (ppu-meta ppu) :y) (ppu-scanline ppu))))
     (destructuring-bind (base x-index y-index)
