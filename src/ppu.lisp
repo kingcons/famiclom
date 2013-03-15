@@ -237,19 +237,31 @@
            (bit-1 (logand (ash plane-1 (- (mod x 8) 7)) 1)))
       (logior (ash bit-1 1) bit-0))))
 
-;;;; Main PPU Methods - *UNTESTED*
+;;;; Rendering helpers
 
-(defun from-oam (oam index)
-  (make-sprite :y          (+ 0 (* 4 (aref oam index)))
-               :tile-index (+ 1 (* 4 (aref oam index)))
-               :attribute  (+ 2 (* 4 (aref oam index)))
-               :x          (+ 3 (* 4 (aref oam index)))))
+(defun nametable-addr (x y)
+  (let* ((x (mod x 64))
+         (y (mod y 60))
+         (x-index (>= x 32))
+         (y-index (>= y 30))
+         (base (cond ((and x-index y-index) #x2c00)
+                     (x-index #x2400)
+                     (y-index #x2800)
+                     (t #x2000))))
+    (list base (mod x 32) (mod y 30))))
+
+(defmethod get-sprite ((ppu ppu) index)
+  (let ((base (* index 4)))
+    (make-sprite :y          (1+ (read-oam ppu (+ 0 base)))
+                 :tile-index (read-oam ppu (+ 1 base))
+                 :attribute  (read-oam ppu (+ 2 base))
+                 :x          (read-oam ppu (+ 3 base)))))
 
 (defun get-visible-sprites (ppu)
   ; TODO: Did I mistranslate semantics here?
   (with-accessors ((oam ppu-oam)) ppu
     (loop with count = 0 with result = (make-array 8 :initial-element nil)
-       for i from 0 to 64 for sprite = (from-oam oam i)
+       for i from 0 to 64 for sprite = (get-sprite ppu i)
        when (on-scanline sprite ppu)
        do (if (< count 8)
               (setf (aref result count) i
@@ -268,17 +280,6 @@
         result)))
 
 ;;;; Misc Helpers
-
-(defun nametable-addr (x y)
-  (let* ((x (mod x 64))
-         (y (mod y 60))
-         (x-index (>= x 32))
-         (y-index (>= y 30))
-         (base (cond ((and x-index y-index) #x2c00)
-                     (x-index #x2400)
-                     (y-index #x2800)
-                     (t #x2000))))
-    (list (mod y 30) (mod x 32) base)))
 
 (defun get-bg-pixel (ppu x)
   (let* ((x (+ (getf (ppu-meta ppu) :x) x))
@@ -306,7 +307,7 @@
   (let ((sprites (get-visible-sprites ppu))
         (oam (ppu-oam ppu)))
     (loop for i across sprites when i
-       do (let* ((sprite (from-oam oam i))
+       do (let* ((sprite (get-sprite ppu i))
                  (tile (tiles sprite ppu))
                  (pattern-color nil))
             ; TODO: We want to continue here. Is return right?
