@@ -1,7 +1,7 @@
 (defsystem #:famiclom
   :name "famiclom"
   :description "A headless emulator for the NES"
-  :version "0.0.1"
+  :version "0.0.9"
   :license "BSD"
   :author "Brit Butler <redline6561@gmail.com>"
   :pathname "src/"
