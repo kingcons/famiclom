@@ -149,6 +149,7 @@
 
 ;;;; Sprite RAM/Object Attribute Memory (OAM)
 
+(declaim (inline read-oam))
 (defmethod read-oam ((ppu ppu) addr)
   (aref (ppu-oam ppu) addr))
 
@@ -245,24 +246,13 @@
                      (t #x2000))))
     (list base (mod x 32) (mod y 30))))
 
+(declaim (inline get-sprite get-visible-sprites))
 (defun get-sprite (ppu index)
   (let ((base (* index 4)))
     (make-sprite :y          (1+ (read-oam ppu (+ 0 base)))
                  :tile-index (read-oam ppu (+ 1 base))
                  :attribute  (read-oam ppu (+ 2 base))
                  :x          (read-oam ppu (+ 3 base)))))
-
-(defun get-attrib (ppu base x y)
-  (flet ((magic (x y) ; TODO: Why? Rename after enlightenment.
-           (+ (* (round y 4) 8)
-              (round x 4))))
-    (let ((left (< (mod x 4) 2))
-          (top (< (mod y 4) 2))
-          (attr-byte (read-vram ppu (+ base (magic x y) #x3c0))))
-      (cond ((and left top) (logand attr-byte #x03))
-            (top (logand (ash attr-byte -2) #x03))
-            (left (logand (ash attr-byte -4) #x03))
-            (t (logand (ash attr-byte -6) #x03))))))
 
 (defun get-visible-sprites (ppu)
   (loop with count = 0 with result = (make-list 8 :initial-element nil)
@@ -275,6 +265,18 @@
               (set-sprite-overflow ppu 1)
               (return result)))
      finally (return result)))
+
+(defun get-attrib (ppu base x y)
+  (flet ((magic (x y) ; TODO: Why? Rename after enlightenment.
+           (+ (* (round y 4) 8)
+              (round x 4))))
+    (let ((left (< (mod x 4) 2))
+          (top (< (mod y 4) 2))
+          (attr-byte (read-vram ppu (+ base (magic x y) #x3c0))))
+      (cond ((and left top) (logand attr-byte #x03))
+            (top (logand (ash attr-byte -2) #x03))
+            (left (logand (ash attr-byte -4) #x03))
+            (t (logand (ash attr-byte -6) #x03))))))
 
 (defun get-bg-pixel (ppu x)
   (let* ((x (+ (getf (ppu-meta ppu) :x) x))
