@@ -48,12 +48,12 @@
      (if (zerop (logand (ppu-ctrl ppu) ,compare))
          ,then ,else)))
 
-(defctrl x-scroll-offset      #x01  0  256)
-(defctrl y-scroll-offset      #x02  0  240)
-(defctrl vram-step            #x04  1  32)
+(defctrl x-scroll-offset      #x01  0  +width+)
+(defctrl y-scroll-offset      #x02  0  +height+)
+(defctrl vram-step            #x04  1  #x20)
 (defctrl sprite-pattern-addr  #x08  0  #x1000)
 (defctrl bg-pattern-addr      #x10  0  #x1000)
-(defctrl sprite-size          #x20  8  16)
+(defctrl sprite-size          #x20  8  #x10)
 (defctrl vblank-nmi           #x80 nil t)
 
 (defmethod update-ctrl ((ppu ppu) val)
