@@ -233,6 +233,14 @@
            (bit-1 (logand (ash plane-1 (- (mod x 8) 7)) 1)))
       (logior (ash bit-1 1) bit-0))))
 
+(defun pick-color (a b default)
+  (cond ((not (or a b)) default)
+        ((and a (not b)) a)
+        ((and (not a) b) (first b))
+        (t (ecase (second b)
+             (:above (first b))
+             (:below a)))))
+
 ;;;; Rendering helpers
 
 (defun nametable-addr (x y)
@@ -294,7 +302,7 @@
   ;; if none of the sprites are in our bounding box or if none are opaque.
   (let ((sprites (get-visible-sprites ppu))
         (oam (ppu-oam ppu)))
-    (loop for i across sprites when i
+    (loop for i in sprites when i
        do (let* ((sprite (get-sprite ppu i))
                  (tile (tiles sprite ppu))
                  (pattern-color nil))
@@ -315,25 +323,8 @@
             (when (and (zerop i) opaque-p)
               (set-sprite-zero-hit ppu 1))
             (let ((tile-color (logior (ash (palette sprite) 2) pattern-color)))
-              (return (get-color ppu (+ #x3f00 tile-color))))))))
-
-;;;; Misc Helpers
-
-(defun get-visible-sprites (ppu)
-  ; TODO: Did I mistranslate semantics here?
-  (with-accessors ((oam ppu-oam)) ppu
-    (loop with count = 0 with result = (make-array 8 :initial-element nil)
-       for i from 0 to 64 for sprite = (get-sprite ppu i)
-       when (on-scanline sprite ppu)
-       do (if (< count 8)
-              (setf (aref result count) i
-                    count (1+ count))
-              (set-sprite-overflow ppu 1))
-       finally (return result))))
-
-(defun on-top (x y)
-  (declare (ignore x)) ; TODO: determine sprite priority
-  y)
+              (return (list (get-color ppu (+ #x3f00 tile-color))
+                            (priority sprite))))))))
 
 ;;;; Core
 
@@ -379,11 +370,7 @@
                            (get-bg-pixel ppu x)))
                (sprite-color (when (show-sprites ppu)
                                (get-sprite-pixel ppu x bg-color)))
-               (color (cond ((and bg-color sprite-color)
-                             (on-top bg-color sprite-color))
-                            (bg-color bg-color)
-                            (sprite-color sprite-color)
-                            (t bd-color))))
+               (color (pick-color bg-color sprite-color bd-color)))
           ;(put-pixel x (ppu-scanline ppu) color)
           (sdl:with-pixel (pixels (sdl:fp *screen*))
             (sdl:write-pixel pixels x (ppu-scanline ppu) color)))))))
