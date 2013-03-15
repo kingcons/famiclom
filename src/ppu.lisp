@@ -207,14 +207,10 @@
 
 ;;;; Colors
 
-(declaim (inline make-color get-color put-pixel))
-(defstruct color
-  (r 0 :type u8)
-  (g 0 :type u8)
-  (b 0 :type u8))
-
-(defun get-color (index)
-  (let* ((base (* index 3))
+(declaim (inline get-color put-pixel))
+(defmethod get-color ((ppu ppu) vram-index)
+  (let* ((color-index (logand (read-vram ppu vram-index) #x3f))
+         (base (* color-index 3))
          (red   (aref *color-palette* (+ 2 base)))
          (green (aref *color-palette* (+ 1 base)))
          (blue  (aref *color-palette* (+ 0 base))))
@@ -226,7 +222,7 @@
           (aref *frame* (+ base 1)) (color-g color)
           (aref *frame* (+ base 2)) (color-b color))))
 
-(defmethod get-pixel-color ((ppu ppu) kind tile x y)
+(defmethod get-pattern-color ((ppu ppu) kind tile x y)
   (let ((offset (+ y (ash tile 4))))
     (case kind
       (:bg (incf offset (bg-pattern-addr ppu)))
@@ -257,49 +253,41 @@
                  :attribute  (read-oam ppu (+ 2 base))
                  :x          (read-oam ppu (+ 3 base)))))
 
-(defun get-visible-sprites (ppu)
-  ; TODO: Did I mistranslate semantics here?
-  (with-accessors ((oam ppu-oam)) ppu
-    (loop with count = 0 with result = (make-array 8 :initial-element nil)
-       for i from 0 to 64 for sprite = (get-sprite ppu i)
-       when (on-scanline sprite ppu)
-       do (if (< count 8)
-              (setf (aref result count) i
-                    count (1+ count))
-              (set-sprite-overflow ppu 1))
-       finally (return result))))
+(defmethod get-attrib ((ppu ppu) base x y)
+  (flet ((magic (x y) ; TODO: Why? Rename after enlightenment.
+           (+ (* (round y 4) 8)
+              (round x 4))))
+    (let ((left (< (mod x 4) 2))
+          (top (< (mod y 4) 2))
+          (attr-byte (read-vram ppu (+ base (magic x y) #x3c0))))
+      (cond ((and left top) (logand attr-byte #x03))
+            (top (logand (ash attr-byte -2) #x03))
+            (left (logand (ash attr-byte -4) #x03))
+            (t (logand (ash attr-byte -6) #x03))))))
 
-(defun buffered-read (ppu)
-  (let* ((addr (ppu-addr ppu))
-         (result (read-vram ppu addr)))
-    (incf (ppu-addr ppu) (vram-step ppu))
-    (if (< addr #x3f00)
-        (prog1
-            (ppu-buffer ppu)
-          (setf (ppu-buffer ppu) result))
-        result)))
+(defmethod get-visible-sprites ((ppu ppu))
+  (loop with count = 0 with result = (make-list 8 :initial-element nil)
+     for i from 0 to 63 for sprite = (get-sprite ppu i)
+     when (on-scanline sprite ppu)
+     do (if (< count 8)
+            (setf (nth count result) i
+                  count (1+ count))
+            (progn
+              (set-sprite-overflow ppu 1)
+              (return result)))
+     finally (return result)))
 
-;;;; Misc Helpers
-
-(defun get-bg-pixel (ppu x)
+(defmethod get-bg-pixel ((ppu ppu) x)
   (let* ((x (+ (getf (ppu-meta ppu) :x) x))
-         (y (+ (getf (ppu-meta ppu) :y) (ppu-scanline ppu)))
-         (base (nametable-addr (round x 8) (round y 8))) ; TODO: Use floor instead?
-         (tile (read-vram ppu (apply '+ (* 32 (first base)) (rest base))))
-         (color (get-pixel-color ppu 'foo tile (mod x 8) (mod y 8))))
-    (if (zerop color)
-        nil
-        (let* ((group (+ (* (round (first base) 4) 8)
-                         (round (second base) 4)))
-               (attrib (read-vram ppu (apply #'+ #x03c0 group base)))
-               (attr-color (cond ((and (< (mod (second base) 4) 2)
-                                       (< (mod (first base) 4) 2)) attrib)
-                                 ((< (mod (first base) 4) 2) (ash attrib -2))
-                                 ((< (mod (second base) 4) 2) (ash attrib -4))
-                                 (t (ash attrib -6))))
-               (tile-color (logior (ash (logand attr-color #x03) 2) color))
-               (palette-index (logand (read-vram ppu (+ #x3f00 tile-color)) #x3f)))
-          (get-color palette-index)))))
+         (y (+ (getf (ppu-meta ppu) :y) (ppu-scanline ppu))))
+    (destructuring-bind (base x-index y-index) (nametable-addr (round x 8) (round y 8))
+      (let* ((tile (read-vram ppu (+ (* 32 y-index) x-index base)))
+             (color (get-pattern-color ppu :bg tile (mod x 8) (mod y 8))))
+        (if (zerop color)
+            nil
+            (let* ((attr-color (get-attrib ppu base x-index y-index))
+                   (tile-color (logior (ash attr-color 2) color)))
+              (get-color ppu (+ #x3f00 tile-color))))))))
 
 (defun get-sprite-pixel (ppu x opaque-p)
   ;; get-sprite-pixel needs to return nil if every visible-sprite is nil,
@@ -319,22 +307,45 @@
                      (y (- (ppu-scanline ppu) (sprite-y sprite))))
                  (when (flip-h sprite) (setf x (- 7 x)))
                  (when (flip-v sprite) (setf y (- 7 y)))
-                 (setf pattern-color (get-pixel-color ppu :sprite tile x y))))
+                 (setf pattern-color (get-pattern-color ppu :sprite tile x y))))
               (list
                (error "8x16 sprite rendering unimplemented!")))
             (unless (zerop pattern-color)
               (return nil))
             (when (and (zerop i) opaque-p)
               (set-sprite-zero-hit ppu 1))
-            (let* ((tile-color (logior (ash (palette sprite) 2) pattern-color))
-                   (palette-index (logand (+ #x3f00 tile-color) #x3f)))
-              (return (get-color (read-vram ppu palette-index))))))))
+            (let ((tile-color (logior (ash (palette sprite) 2) pattern-color)))
+              (return (get-color ppu (+ #x3f00 tile-color))))))))
+
+;;;; Misc Helpers
+
+(defun get-visible-sprites (ppu)
+  ; TODO: Did I mistranslate semantics here?
+  (with-accessors ((oam ppu-oam)) ppu
+    (loop with count = 0 with result = (make-array 8 :initial-element nil)
+       for i from 0 to 64 for sprite = (get-sprite ppu i)
+       when (on-scanline sprite ppu)
+       do (if (< count 8)
+              (setf (aref result count) i
+                    count (1+ count))
+              (set-sprite-overflow ppu 1))
+       finally (return result))))
 
 (defun on-top (x y)
   (declare (ignore x)) ; TODO: determine sprite priority
   y)
 
 ;;;; Core
+
+(defun buffered-read (ppu)
+  (let* ((addr (ppu-addr ppu))
+         (result (read-vram ppu addr)))
+    (incf (ppu-addr ppu) (vram-step ppu))
+    (if (< addr #x3f00)
+        (prog1
+            (ppu-buffer ppu)
+          (setf (ppu-buffer ppu) result))
+        result)))
 
 (defun get-byte-ppu% (addr)
   (let ((ppu (nes-ppu *nes*)))
@@ -362,8 +373,7 @@
 
 (defgeneric render-scanline (ppu)
   (:method ((ppu ppu)) ;; TODO: Mirroring. Scrolling?
-    (let* ((bd-index (logand (read-vram ppu #x3f00) #x3f))
-           (bd-color (get-color bd-index)))
+    (let ((bd-color (get-color ppu #x3f00)))
       (dotimes (x +width+)
         (let* ((bg-color (when (show-bg ppu)
                            (get-bg-pixel ppu x)))
