@@ -8,6 +8,7 @@
                       #:current-instruction
                       #:reset
                       #:u8
+                      #:u16
                       #:bytevector
                       #:defenum
                       #:get-byte

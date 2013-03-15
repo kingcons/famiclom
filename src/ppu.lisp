@@ -90,20 +90,18 @@
   (pattern-table (bytevector #x2000))
   (nametable     (bytevector #x0800))
   (palette       (bytevector #x0020))
-  (oam           (bytevector #x0100)) ; Sprite RAM/Object Attrib Mem
-  (ctrl          0 :type u8)
-  (mask          0 :type u8)
-  (status        0 :type u8)
-  (oam-addr      0 :type u8)
-  (cycles        0 :type fixnum)
-  (scroll        '(:x 0 :y 0 :next :x))
-  (addr          '(:val 0 :next :hi))
+  (oam           (bytevector #x0100)) ; Sprite RAM
+  (ctrl          0   :type u8)
+  (mask          0   :type u8)
+  (status        0   :type u8)
+  (oam-addr      0   :type u8)
+  (scroll-x      0   :type u8)
+  (scroll-y      0   :type u8)
+  (scroll-next   :x  :type keyword)
+  (addr          0   :type u16)
+  (addr-next     :hi :type keyword)
+  (cycles        0   :type fixnum)
   (meta          '(:scanline 0 :buffer 0 :x 0 :y 0)))
-
-(defmethod initialize-instance :after ((ppu ppu) &key)
-  ; TODO: handle variable size nametables in vram, stuff in oam, based on mapper.
-  ; Does this need to be done in the init method of the mapper? Probably.
-  )
 
 (defmacro defctrl (name compare then else)
   "Define PPU control register methods." ; TODO: elaborate
@@ -121,63 +119,67 @@
 
 (defmacro defmask (name compare)
   "Define PPU mask register methods." ; TODO: elaborate
-  `(defmethod ,name ((ppu ppu)) (plusp (logand (ppu-mask ppu) ,compare))))
+  `(defmethod ,name ((ppu ppu))
+     (not (zerop (logand (ppu-mask ppu) ,compare)))))
 
-(defmask grayscale #x01)
-(defmask show-bg-left #x02)
-(defmask show-sprites-left #x04)
-(defmask show-bg #x08)
-(defmask show-sprites #x10)
-(defmask strong-reds #x20)
-(defmask strong-greens #x40)
-(defmask strong-blues #x80)
+(defmask grayscale          #x01)
+(defmask show-bg-left       #x02)
+(defmask show-sprites-left  #x04)
+(defmask show-bg            #x08)
+(defmask show-sprites       #x10)
+(defmask strong-reds        #x20)
+(defmask strong-greens      #x40)
+(defmask strong-blues       #x80)
 
-(defmethod set-bit-n ((ppu ppu) bit val)
-  (setf (ldb (byte 1 bit) (ppu-status ppu)) val))
+(defmacro defstatus (name bit)
+  "Define PPU status register methods." ; TODO: elaborate
+  `(defmethod ,name ((ppu ppu) val)
+     (setf (ldb (byte 1 ,bit) (ppu-status ppu)) val)))
 
-(defun set-sprite-overflow (ppu val) (set-bit-n ppu 5 val))
-(defun set-sprite-zero-hit (ppu val) (set-bit-n ppu 6 val))
-(defun set-in-vblank (ppu val) (set-bit-n ppu 7 val))
+(defstatus set-sprite-overflow 5)
+(defstatus set-sprite-zero-hit 6)
+(defstatus set-in-vblank       7)
 
 (defmethod read-status ((ppu ppu))
-  (setf (getf (ppu-scroll ppu) :next) :x
-        (getf (ppu-addr ppu) :next) :hi)
+  (setf (ppu-scroll-next ppu) :x
+        (ppu-addr-next ppu) :hi)
   (ppu-status ppu))
 
 (defmethod update-ctrl ((ppu ppu) val)
   (setf (ppu-ctrl ppu) val)
-  (with-accessors ((scroll ppu-scroll)) ppu
-    (let ((old-x (getf scroll :x))
-          (old-y (getf scroll :y)))
-      (setf (getf scroll :x) (logior (wrap-byte old-x) (x-scroll-offset ppu))
-            (getf scroll :y) (logior (wrap-byte old-y) (y-scroll-offset ppu))))))
+  (with-accessors ((x ppu-scroll-x)
+                   (y ppu-scroll-y)) ppu
+    (let ((new-x (logior (wrap-byte x) (x-scroll-offset ppu)))
+          (new-y (logior (wrap-byte y) (y-scroll-offset ppu))))
+      (rotatef x new-x y new-y))))
 
 (defmethod update-scroll ((ppu ppu) val)
   (flet ((magic (old-val) ; TODO: Why? Rename after enlightenment.
            (logior (logand old-val #xff00) val)))
-    (with-accessors ((scroll ppu-scroll)
+    (with-accessors ((next ppu-scroll-next)
+                     (x ppu-scroll-x)
+                     (y ppu-scroll-y)
                      (meta ppu-meta)) ppu
-      (ecase (getf scroll :next)
+      (ecase next
         (:x (setf (getf meta :x) (magic (getf meta :x))
-                  (getf scroll :x) val
-                  (getf scroll :next) :y))
+                  x val next :y))
         (:y (setf (getf meta :y) (magic (getf meta :y))
-                  (getf scroll :y) val
-                  (getf scroll :next) :x))))))
+                  y val next :x))))))
 
 (defmethod update-addr ((ppu ppu) val)
-  (with-accessors ((addr ppu-addr)
-                   (meta ppu-meta)) ppu
-    (let ((prev (getf addr :val)))
-      (ecase (getf addr :next)
-        (:hi (setf (getf addr :val) (logior (logand prev #x00ff) (ash val 8))
-                   (getf addr :next) :lo))
-        (:lo (setf (getf addr :val) (logior (logand prev #xff00) val)
-                   (getf addr :next) :hi
+  (with-accessors ((meta ppu-meta)
+                   (addr ppu-addr)
+                   (addr-next ppu-addr-next)) ppu
+    (let ((prev addr))
+      (ecase addr-next
+        (:hi (setf addr (logior (logand prev #x00ff) (ash val 8))
+                   addr-next :lo))
+        (:lo (setf addr (logior (logand prev #xff00) val)
+                   addr-next :hi
                    (getf meta :x)
                    ;; HACK: Fake out the X scroll register.
                    ;; TODO: Y scrolling.
-                   (let* ((initial (logand (getf addr :val) #x07ff))
+                   (let* ((initial (logand addr #x07ff))
                           (x-base (if (< initial #x400) 0 256)))
                      (logior (wrap-byte (getf meta :x)) x-base))))))))
 
@@ -194,7 +196,7 @@
                            (when (= addr #x10) (setf addr #x00))
                            (setf (aref (ppu-palette ppu) addr) val)))
         (t (error "WRITE: invalid vram address ~a" addr)))
-  (incf (getf (ppu-addr ppu) :val) (vram-step ppu)))
+  (incf (ppu-addr ppu) (vram-step ppu)))
 
 (defmethod store-oam ((ppu ppu) val)
   (with-accessors ((addr ppu-oam-addr)) ppu
@@ -202,9 +204,9 @@
     (incf addr)))
 
 (defun buffered-read (ppu)
-  (let* ((addr (getf (ppu-addr ppu) :val))
+  (let* ((addr (ppu-addr ppu))
          (result (read-vram ppu addr)))
-    (incf (getf (ppu-addr ppu) :val) (vram-step ppu))
+    (incf (ppu-addr ppu) (vram-step ppu))
     (if (< addr #x3f00)
         (prog1
             (getf (ppu-meta ppu) :buffer)
@@ -332,7 +334,7 @@
       (4 (store-oam ppu new-val))
       (5 (update-scroll ppu new-val))
       (6 (update-addr ppu new-val))
-      (7 (store-vram ppu (getf (ppu-addr ppu) :val) new-val)))))
+      (7 (store-vram ppu (ppu-addr ppu) new-val)))))
 
 (defgeneric render-scanline (ppu)
   (:method ((ppu ppu)) ;; TODO: Mirroring. Scrolling?
