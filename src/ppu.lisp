@@ -288,7 +288,8 @@
 (defmethod get-bg-pixel ((ppu ppu) x)
   (let* ((x (+ (getf (ppu-meta ppu) :x) x))
          (y (+ (getf (ppu-meta ppu) :y) (ppu-scanline ppu))))
-    (destructuring-bind (base x-index y-index) (nametable-addr (round x 8) (round y 8))
+    (destructuring-bind (base x-index y-index)
+        (nametable-addr (round x 8) (round y 8))
       (let* ((tile (read-vram ppu (+ (* 32 y-index) x-index base)))
              (color (get-pattern-color ppu :bg tile (mod x 8) (mod y 8))))
         (if (zerop color)
@@ -298,28 +299,27 @@
               (get-color ppu (+ #x3f00 tile-color))))))))
 
 (defun get-sprite-pixel (ppu x opaque-p)
-  ;; get-sprite-pixel needs to return nil if every visible-sprite is nil,
-  ;; if none of the sprites are in our bounding box or if none are opaque.
-  (let ((sprites (get-visible-sprites ppu))
-        (oam (ppu-oam ppu)))
-    (loop for i in sprites when i
-       do (let* ((sprite (get-sprite ppu i))
+  ; get-sprite-pixel needs to return nil if every visible-sprite is nil,
+  ; if none of the sprites are in our bounding box or if none are opaque.
+  (loop for i in (get-visible-sprites ppu) when i
+     do (block get-result
+          (let* ((sprite (get-sprite ppu i))
                  (tile (tiles sprite ppu))
                  (pattern-color nil))
-            ; TODO: We want to continue here. Is return right?
             (unless (in-bounding-box sprite ppu x)
-              (return nil))
+              (return-from get-result nil))
             (etypecase tile
               (fixnum
                (let ((x (- x (sprite-x sprite)))
                      (y (- (ppu-scanline ppu) (sprite-y sprite))))
                  (when (flip-h sprite) (setf x (- 7 x)))
                  (when (flip-v sprite) (setf y (- 7 y)))
+                 ; (assert (and (< x 8) (< y 8)))
                  (setf pattern-color (get-pattern-color ppu :sprite tile x y))))
               (list
                (error "8x16 sprite rendering unimplemented!")))
-            (unless (zerop pattern-color)
-              (return nil))
+            (when (zerop pattern-color)
+              (return-from get-result nil))
             (when (and (zerop i) opaque-p)
               (set-sprite-zero-hit ppu 1))
             (let ((tile-color (logior (ash (palette sprite) 2) pattern-color)))
