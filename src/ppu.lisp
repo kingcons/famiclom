@@ -165,6 +165,38 @@
               (incf tile #x1000))
             (list tile (1+ tile)))))))
 
+;;;; Colors
+
+(declaim (inline make-color get-color put-pixel))
+(defstruct color
+  (r 0 :type u8)
+  (g 0 :type u8)
+  (b 0 :type u8))
+
+(defun get-color (index)
+  (let* ((base (* index 3))
+         (red   (aref *color-palette* (+ 2 base)))
+         (green (aref *color-palette* (+ 1 base)))
+         (blue  (aref *color-palette* (+ 0 base))))
+    (+ (ash red 16) (ash green 8) blue)))
+
+(defun put-pixel (x y color)
+  (let ((base (* 3 (+ x (* y +width+)))))
+    (setf (aref *frame* (+ base 0)) (color-r color)
+          (aref *frame* (+ base 1)) (color-g color)
+          (aref *frame* (+ base 2)) (color-b color))))
+
+(defmethod get-pixel-color ((ppu ppu) kind tile x y)
+  (let ((offset (+ y (ash tile 4))))
+    (case kind
+      (:bg (incf offset (bg-pattern-addr ppu)))
+      (:sprite (incf offset (sprite-pattern-addr ppu))))
+    (let* ((plane-0 (read-vram ppu offset))
+           (plane-1 (read-vram ppu (+ offset 8)))
+           (bit-0 (logand (ash plane-0 (- (mod x 8) 7)) 1))
+           (bit-1 (logand (ash plane-1 (- (mod x 8) 7)) 1)))
+      (logior (ash bit-1 1) bit-0))))
+
 ;;;; Main PPU Methods - *UNTESTED*
 
 (defun from-oam (oam index)
@@ -239,37 +271,6 @@
         result)))
 
 ;;;; Misc Helpers
-
-(declaim (inline make-color get-color put-pixel))
-(defstruct color
-  (r 0 :type u8)
-  (g 0 :type u8)
-  (b 0 :type u8))
-
-(defun get-color (index)
-  (let* ((base (* index 3))
-         (red (aref *color-palette* (+ 2 base)))
-         (green (aref *color-palette* (+ 1 base)))
-         (blue (aref *color-palette* (+ 0 base))))
-    ;(sdl:color :r red :g green :b blue)
-    (+ (ash red 16) (ash green 8) blue)))
-
-(defun put-pixel (x y color)
-  (let ((base (+ x (* y +width+))))
-    (setf (aref *frame* (+ 0 (* 3 base))) (color-r color)
-          (aref *frame* (+ 1 (* 3 base))) (color-g color)
-          (aref *frame* (+ 2 (* 3 base))) (color-b color))))
-
-(defun get-pixel-color (ppu kind tile x y)
-  (let ((offset (+ y (ash tile 4))))
-    (case kind
-      (:bg (incf offset (bg-pattern-addr ppu)))
-      (:sprite (incf offset (sprite-pattern-addr ppu))))
-    (let* ((plane-0 (read-vram ppu offset))
-           (plane-1 (read-vram ppu (+ offset 8)))
-           (bit-0 (logand (ash plane-0 (- (mod x 8) 7)) 1))
-           (bit-1 (logand (ash plane-1 (- (mod x 8) 7)) 1)))
-      (logior (ash 1 bit-1) bit-0))))
 
 (defun nametable-addr (x y)
   (let* ((x (mod x 64))
