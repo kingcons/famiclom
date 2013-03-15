@@ -103,6 +103,14 @@
   (cycles        0   :type fixnum)
   (meta          '(:scanline 0 :buffer 0 :x 0 :y 0)))
 
+(defun wrap-nametable (val)
+  "Wrap VAL to index into the PPU nametable."
+  (logand val #x07ff))
+
+(defun wrap-palette (val)
+  "Wrap VAL to index into the PPU palette."
+  (logand val #x1f))
+
 (defmacro defctrl (name compare then else)
   "Define PPU control register methods." ; TODO: elaborate
   `(defmethod ,name ((ppu ppu))
@@ -179,22 +187,23 @@
                    (getf meta :x)
                    ;; HACK: Fake out the X scroll register.
                    ;; TODO: Y scrolling.
-                   (let* ((initial (logand addr #x07ff))
+                   (let* ((initial (wrap-nametable addr))
                           (x-base (if (< initial #x400) 0 256)))
                      (logior (wrap-byte (getf meta :x)) x-base))))))))
 
 (defmethod read-vram ((ppu ppu) addr)
   (cond ((< addr #x2000) (aref (ppu-pattern-table ppu) addr))
-        ((< addr #x3f00) (aref (ppu-nametable ppu) (logand addr #x07ff)))
-        ((< addr #x4000) (aref (ppu-palette ppu) (logand addr #x1f)))
+        ((< addr #x3f00) (aref (ppu-nametable ppu) (wrap-nametable addr)))
+        ((< addr #x4000) (aref (ppu-palette ppu) (wrap-palette addr)))
         (t (error "READ: invalid vram address ~a" addr))))
 
 (defmethod store-vram ((ppu ppu) addr val)
-  (cond ((< addr #x2000) nil)
-        ((< addr #x3f00) (setf (aref (ppu-nametable ppu) (logand addr #x07ff)) val))
-        ((< addr #x4000) (let ((addr (logand addr #x1f)))
-                           (when (= addr #x10) (setf addr #x00))
-                           (setf (aref (ppu-palette ppu) addr) val)))
+  (cond ((< addr #x2000) (setf (aref (ppu-pattern-table ppu) addr) val))
+        ((< addr #x3f00) (let ((wrapped (wrap-nametable addr)))
+                           (setf (aref (ppu-nametable ppu) wrapped) val)))
+        ((< addr #x4000) (let ((wrapped (wrap-palette addr)))
+                           (when (= wrapped #x10) (setf wrapped #x00))
+                           (setf (aref (ppu-palette ppu) wrapped) val)))
         (t (error "WRITE: invalid vram address ~a" addr)))
   (incf (ppu-addr ppu) (vram-step ppu)))
 
