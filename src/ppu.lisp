@@ -88,6 +88,11 @@
 (defstatus set-sprite-zero-hit 6)
 (defstatus set-in-vblank       7)
 
+(defmethod read-status ((ppu ppu))
+  (setf (ppu-scroll-next ppu) :x
+        (ppu-addr-next ppu) :hi)
+  (ppu-status ppu))
+
 (defmethod update-scroll ((ppu ppu) val)
   (flet ((magic (old-val) ; TODO: Why? Rename after enlightenment.
            (logior (logand old-val #xff00) val)))
@@ -251,11 +256,6 @@
                     count (1+ count))
               (set-sprite-overflow ppu 1))
        finally (return result))))
-
-(defmethod read-status ((ppu ppu))
-  (setf (ppu-scroll-next ppu) :x
-        (ppu-addr-next ppu) :hi)
-  (ppu-status ppu))
 
 (defun buffered-read (ppu)
   (let* ((addr (ppu-addr ppu))
