@@ -16,6 +16,7 @@
 ;; Also seems to suggest that functions may be more approriate for get-pattern-color, get-attrib,
 ;; get-bg-pixel, get-visible-sprites, get-sprite.
 (defun optimize-test ()
+  (reset *nes*)
   (load-rom (app-path "smb.nes"))
   (sdl:with-init (sdl:sdl-init-video sdl:sdl-init-audio)
     (setf *screen* (sdl:window 256 240 :bpp 24 :sw t))
