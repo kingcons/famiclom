@@ -59,6 +59,12 @@
 (defctrl sprite-size          #x20  8  16)
 (defctrl vblank-nmi           #x80 nil t)
 
+(defmethod update-ctrl ((ppu ppu) val)
+  (setf (ppu-ctrl ppu) val)
+  (with-accessors ((meta ppu-meta)) ppu
+    (setf (getf meta :x) (logior (wrap-byte (getf meta :x)) (x-scroll-offset ppu))
+          (getf meta :y) (logior (wrap-byte (getf meta :y)) (y-scroll-offset ppu)))))
+
 (defmacro defmask (name compare)
   "Define PPU mask register methods." ; TODO: elaborate
   `(defmethod ,name ((ppu ppu))
@@ -81,6 +87,35 @@
 (defstatus set-sprite-overflow 5)
 (defstatus set-sprite-zero-hit 6)
 (defstatus set-in-vblank       7)
+
+(defmethod update-scroll ((ppu ppu) val)
+  (flet ((magic (old-val) ; TODO: Why? Rename after enlightenment.
+           (logior (logand old-val #xff00) val)))
+    (with-accessors ((next ppu-scroll-next)
+                     (x ppu-scroll-x)
+                     (y ppu-scroll-y)
+                     (meta ppu-meta)) ppu
+      (ecase next
+        (:x (setf (getf meta :x) (magic (getf meta :x))
+                  x val next :y))
+        (:y (setf (getf meta :y) (magic (getf meta :y))
+                  y val next :x))))))
+
+(defmethod update-addr ((ppu ppu) val)
+  (with-accessors ((meta ppu-meta)
+                   (addr ppu-addr)
+                   (next ppu-addr-next)) ppu
+    (ecase next
+      (:hi (setf addr (logior (logand addr #x00ff) (ash val 8))
+                 next :lo))
+      (:lo (setf addr (logior (logand addr #xff00) val)
+                 next :hi
+                 (getf meta :x)
+                 ;; HACK: Fake out the X scroll register.
+                 ;; TODO: Y scrolling.
+                 (let* ((initial (wrap-nametable addr))
+                        (base (if (< initial #x400) 0 256)))
+                   (logior (wrap-byte (getf meta :x)) base)))))))
 
 ;;;; Helpers
 
@@ -221,44 +256,6 @@
   (setf (ppu-scroll-next ppu) :x
         (ppu-addr-next ppu) :hi)
   (ppu-status ppu))
-
-(defmethod update-ctrl ((ppu ppu) val)
-  (setf (ppu-ctrl ppu) val)
-  (with-accessors ((x ppu-scroll-x)
-                   (y ppu-scroll-y)) ppu
-    (let ((new-x (logior (wrap-byte x) (x-scroll-offset ppu)))
-          (new-y (logior (wrap-byte y) (y-scroll-offset ppu))))
-      (rotatef x new-x y new-y))))
-
-(defmethod update-scroll ((ppu ppu) val)
-  (flet ((magic (old-val) ; TODO: Why? Rename after enlightenment.
-           (logior (logand old-val #xff00) val)))
-    (with-accessors ((next ppu-scroll-next)
-                     (x ppu-scroll-x)
-                     (y ppu-scroll-y)
-                     (meta ppu-meta)) ppu
-      (ecase next
-        (:x (setf (getf meta :x) (magic (getf meta :x))
-                  x val next :y))
-        (:y (setf (getf meta :y) (magic (getf meta :y))
-                  y val next :x))))))
-
-(defmethod update-addr ((ppu ppu) val)
-  (with-accessors ((meta ppu-meta)
-                   (addr ppu-addr)
-                   (addr-next ppu-addr-next)) ppu
-    (let ((prev addr))
-      (ecase addr-next
-        (:hi (setf addr (logior (logand prev #x00ff) (ash val 8))
-                   addr-next :lo))
-        (:lo (setf addr (logior (logand prev #xff00) val)
-                   addr-next :hi
-                   (getf meta :x)
-                   ;; HACK: Fake out the X scroll register.
-                   ;; TODO: Y scrolling.
-                   (let* ((initial (wrap-nametable addr))
-                          (x-base (if (< initial #x400) 0 256)))
-                     (logior (wrap-byte (getf meta :x)) x-base))))))))
 
 (defun buffered-read (ppu)
   (let* ((addr (ppu-addr ppu))
