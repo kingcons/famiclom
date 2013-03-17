@@ -150,10 +150,10 @@
 ;;;; Sprite RAM/Object Attribute Memory (OAM)
 
 (declaim (inline read-oam))
-(defmethod read-oam ((ppu ppu) addr)
+(defun read-oam (ppu addr)
   (aref (ppu-oam ppu) addr))
 
-(defmethod write-oam ((ppu ppu) val)
+(defun write-oam (ppu val)
   (with-accessors ((addr ppu-oam-addr)) ppu
     (setf (aref (ppu-oam ppu) addr) val)
     (incf addr)))
@@ -179,7 +179,7 @@
       :above
       :below))
 
-(defmethod on-scanline ((sprite sprite) (ppu ppu))
+(defun on-scanline (sprite ppu)
   (with-accessors ((scanline ppu-scanline)) ppu
     (if (< scanline (sprite-y sprite))
         nil
@@ -187,13 +187,13 @@
           (08 (< scanline (+ (sprite-y sprite) 08)))
           (16 (< scanline (+ (sprite-y sprite) 16)))))))
 
-(defmethod in-bounding-box ((sprite sprite) (ppu ppu) x)
+(defun in-bounding-box (sprite ppu x)
   ; KLUDGE: Y is assumed to be the current scanline.
   (and (>= x (sprite-x sprite))
        (< x (+ (sprite-x sprite) 8))
        (on-scanline sprite ppu)))
 
-(defmethod tiles ((sprite sprite) (ppu ppu))
+(defun tiles (sprite ppu)
   (let ((base (sprite-pattern-addr ppu)))
     (ecase (sprite-size ppu)
       (8 (logior (sprite-tile-index sprite) base))
@@ -206,7 +206,7 @@
 ;;;; Colors
 
 (declaim (inline get-color))
-(defmethod get-color ((ppu ppu) vram-index)
+(defun get-color (ppu vram-index)
   (let* ((color-index (logand (read-vram ppu vram-index) #x3f))
          (base (* color-index 3))
          (red   (aref *color-palette* (+ 2 base)))
