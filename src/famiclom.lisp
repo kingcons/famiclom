@@ -56,9 +56,7 @@
     (loop do
          (let ((c-step (6502-step cpu (6502:get-byte (6502:immediate cpu))))
                (p-step (ppu-step ppu (6502:cpu-cc cpu))))
-           (when (getf p-step :vblank-nmi)
-             (6502:nmi cpu)
-             (setf (getf p-step :vblank-nmi) nil))
-           (when (getf p-step :new-frame)
-             (sdl:update-display *screen*)
-             (setf (getf p-step :new-frame) nil))))))
+           (when (ppu-result-vblank p-step)
+             (6502:nmi cpu))
+           (when (ppu-result-new-frame p-step)
+             (sdl:update-display *screen*))))))

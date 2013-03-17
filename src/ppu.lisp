@@ -38,7 +38,8 @@
   (buffer        0   :type u8)
   (scanline      0   :type u16)
   (cycles        0   :type fixnum)
-  (meta          '(:x 0 :y 0)))
+  (meta-x        0   :type u16)
+  (meta-y        0   :type u16))
 
 ;;;; PPU Register methods
 
@@ -58,9 +59,10 @@
 
 (defmethod update-ctrl ((ppu ppu) val)
   (setf (ppu-ctrl ppu) val)
-  (with-accessors ((meta ppu-meta)) ppu
-    (setf (getf meta :x) (logior (wrap-byte (getf meta :x)) (x-scroll-offset ppu))
-          (getf meta :y) (logior (wrap-byte (getf meta :y)) (y-scroll-offset ppu)))))
+  (with-accessors ((meta-x ppu-meta-x)
+                   (meta-y ppu-meta-y)) ppu
+    (setf meta-x (logior (wrap-byte meta-x) (x-scroll-offset ppu))
+          meta-y (logior (wrap-byte meta-y) (y-scroll-offset ppu)))))
 
 (defmacro defmask (name compare)
   "Define PPU mask register methods." ; TODO: elaborate
@@ -96,28 +98,27 @@
     (with-accessors ((next ppu-scroll-next)
                      (x ppu-scroll-x)
                      (y ppu-scroll-y)
-                     (meta ppu-meta)) ppu
+                     (meta-x ppu-meta-x)
+                     (meta-y ppu-meta-y)) ppu
       (ecase next
-        (:x (setf (getf meta :x) (magic (getf meta :x))
-                  x val next :y))
-        (:y (setf (getf meta :y) (magic (getf meta :y))
-                  y val next :x))))))
+        (:x (setf meta-x (magic meta-x) x val next :y))
+        (:y (setf meta-y (magic meta-y) y val next :x))))))
 
 (defmethod update-addr ((ppu ppu) val)
-  (with-accessors ((meta ppu-meta)
-                   (addr ppu-addr)
+  (with-accessors ((addr ppu-addr)
+                   (meta-x ppu-meta-x)
                    (next ppu-addr-next)) ppu
     (ecase next
       (:hi (setf addr (logior (logand addr #x00ff) (ash val 8))
                  next :lo))
       (:lo (setf addr (logior (logand addr #xff00) val)
                  next :hi
-                 (getf meta :x)
+                 meta-x
                  ;; HACK: Fake out the X scroll register.
                  ;; TODO: Y scrolling.
                  (let* ((initial (wrap-nametable addr))
                         (base (if (< initial #x400) 0 256)))
-                   (logior (wrap-byte (getf meta :x)) base)))))))
+                   (logior (wrap-byte meta-x) base)))))))
 
 ;;;; Helpers
 
@@ -279,8 +280,8 @@
             (t (logand (ash attr-byte -6) #x03))))))
 
 (defun get-bg-pixel (ppu x)
-  (let* ((x (+ (getf (ppu-meta ppu) :x) x))
-         (y (+ (getf (ppu-meta ppu) :y) (ppu-scanline ppu))))
+  (let* ((x (+ (ppu-meta-x ppu) x))
+         (y (+ (ppu-meta-y ppu) (ppu-scanline ppu))))
     (destructuring-bind (base x-index y-index)
         (nametable-addr (round x 8) (round y 8))
       (let* ((tile (read-vram ppu (+ (* 32 y-index) x-index base)))
@@ -376,11 +377,15 @@
   (set-in-vblank ppu 0)
   t)
 
+(defstruct ppu-result
+  (vblank    nil :type boolean)
+  (new-frame nil :type boolean))
+
 (defgeneric ppu-step (ppu to-cycle)
   (:method ((ppu ppu) to-cycle)
     (with-accessors ((scanline ppu-scanline)) ppu
       (let ((cycles-per-scanline 114))
-        (loop with result = '(:vblank-nmi nil :new-frame nil)
+        (loop with result = (make-ppu-result)
            for next-scanline = (+ (ppu-cycles ppu) cycles-per-scanline)
            until (> next-scanline to-cycle)
            do (progn
@@ -388,7 +393,7 @@
                   (render-scanline ppu))
                 (incf scanline)
                 (case scanline
-                  (241 (setf (getf result :vblank-nmi) (start-vblank ppu)))
-                  (261 (setf (getf result :new-frame) (new-frame ppu))))
+                  (241 (setf (ppu-result-vblank result) (start-vblank ppu)))
+                  (261 (setf (ppu-result-new-frame result) (new-frame ppu))))
                 (incf (ppu-cycles ppu) cycles-per-scanline))
            finally (return result))))))
