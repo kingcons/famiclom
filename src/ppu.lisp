@@ -226,6 +226,19 @@
            (bit-1 (logand (ash plane-1 (- (mod x 8) 7)) 1)))
       (logior (ash bit-1 1) bit-0))))
 
+(defun get-sprite-color (ppu sprite x)
+  (let ((tile (tiles sprite ppu)))
+    (etypecase tile
+      (fixnum
+       (let ((x (- x (sprite-x sprite)))
+             (y (- (ppu-scanline ppu) (sprite-y sprite))))
+         (when (flip-h sprite) (setf x (- 7 x)))
+         (when (flip-v sprite) (setf y (- 7 y)))
+                                        ; (assert (and (< x 8) (< y 8)))
+         (get-pattern-color ppu :sprite tile x y)))
+      (list
+       (error "8x16 sprite rendering unimplemented!")))))
+
 (defun pick-color (a b default)
   (cond ((not (or a b)) default)
         ((and a (not b)) a)
@@ -297,28 +310,17 @@
   ; if none of the sprites are in our bounding box or if none are opaque.
   (loop for i in (get-visible-sprites ppu) when i
      do (block get-result
-          (let* ((sprite (get-sprite ppu i))
-                 (tile (tiles sprite ppu))
-                 (pattern-color nil))
+          (let ((sprite (get-sprite ppu i)))
             (unless (in-bounding-box sprite ppu x)
               (return-from get-result nil))
-            (etypecase tile
-              (fixnum
-               (let ((x (- x (sprite-x sprite)))
-                     (y (- (ppu-scanline ppu) (sprite-y sprite))))
-                 (when (flip-h sprite) (setf x (- 7 x)))
-                 (when (flip-v sprite) (setf y (- 7 y)))
-                 ; (assert (and (< x 8) (< y 8)))
-                 (setf pattern-color (get-pattern-color ppu :sprite tile x y))))
-              (list
-               (error "8x16 sprite rendering unimplemented!")))
-            (when (zerop pattern-color)
-              (return-from get-result nil))
-            (when (and (zerop i) opaque-p)
-              (set-sprite-zero-hit ppu 1))
-            (let ((tile-color (logior (ash (palette sprite) 2) pattern-color)))
-              (return (list (get-color ppu (+ #x3f00 tile-color))
-                            (priority sprite))))))))
+            (let ((pattern-color (get-sprite-color ppu sprite x)))
+              (when (zerop pattern-color)
+                (return-from get-result nil))
+              (when (and (zerop i) opaque-p)
+                (set-sprite-zero-hit ppu 1))
+              (let ((tile-color (logior (ash (palette sprite) 2) pattern-color)))
+                (return (list (get-color ppu (+ #x3f00 tile-color))
+                              (priority sprite)))))))))
 
 ;;;; Core
 
