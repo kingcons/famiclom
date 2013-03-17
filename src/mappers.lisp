@@ -5,6 +5,11 @@
 ;; Bigtime TENES methods: init, shutdown, read, write.
 ;; Also has scanline_start, scanline_end, save_state, restore_state.
 
+;; TODO: Add something like this to romreader?
+;; At least add a :{prg,chr}-bank-size to rom-metadata.
+(defun wrap-bank (addr)
+  (logand addr #x3fff))
+
 (defclass mapper () ((rom :initarg :rom :accessor mapper-rom)))
 
 (defgeneric make-mapper (id &rest args)
@@ -56,7 +61,7 @@ NOTE: This macro is unhygienic in its handling of schema."
            (when (plusp (getf (rom-metadata rom) :chr-size))
              (setf (ppu-pattern-table (nes-ppu *nes*))
                    (subseq (rom-chr rom) 0 #x2000))))
-   :getter (flet ((offset (x) (logior (* x #x4000) (logand address #x3fff))))
+   :getter (flet ((offset (x) (logior (* x #x4000) (wrap-bank address))))
              (aref (rom-prg rom) (offset (get-bank mapper address))))
    :setter (if (check-reset mapper value)
                nil
