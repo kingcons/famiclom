@@ -5,15 +5,32 @@
 ;; Bigtime TENES methods: init, shutdown, read, write.
 ;; Also has scanline_start, scanline_end, save_state, restore_state.
 
-;; TODO: Add something like this to romreader?
-;; At least add a :{prg,chr}-bank-size to rom-metadata.
+(defun chr-slice (rom n &optional (size #x1000))
+  "Given a ROM and page, n, return the Nth 4kb chunk of sprite data (CHR)."
+  (let ((start (* #x1000 n)))
+    (subseq (rom-chr rom) start (+ start size))))
+
 (defun wrap-bank (addr)
+  "Wrap an address, ADDR, to a 16k ROM bank."
   (logand addr #x3fff))
+
+(defun high-bank-p (addr)
+  "Is ADDR accessing the high ROM bank (i.e. > #xc000)."
+  (logbitp 14 addr))
 
 (defclass mapper () ((rom :initarg :rom :accessor mapper-rom)))
 
+(defgeneric pages (mapper kind)
+  (:documentation "Get the number of pages in a ROM. KIND may be :PRG or :CHR.")
+  (:method ((mapper mapper) kind)
+    (let ((meta (rom-metadata (mapper-rom mapper))))
+      (ecase kind
+        (:prg (getf meta :prg-roms))
+        (:chr (* 2 (getf meta :chr-roms)))))))
+
 (defgeneric make-mapper (id &rest args)
-  (:documentation "Return a mapper instance for the given ID."))
+  (:documentation "Return a mapper instance for the given ID.")
+  (:method (id &rest args) (error "This mapper is not yet supported.")))
 
 (defgeneric get-mapper (mapper address)
   (:documentation "Get the value of ADDRESS from MAPPER."))
@@ -41,63 +58,77 @@ NOTE: This macro is unhygienic in its handling of schema."
          ,(getf schema :setter)))))
 
 (defmapper nrom (:id 0)
-  (:init (when (plusp (getf (rom-metadata rom) :chr-size))
+  (:init (when (plusp (pages instance :chr))
            (setf (ppu-pattern-table (nes-ppu *nes*)) (rom-chr rom)))
    :getter (let ((size (getf (rom-metadata rom) :prg-size)))
              (aref (rom-prg rom) (logand address (1- size))))
    :setter nil))
 
+;; TODO: We do not support the few MMC1 games with 32kb banks/512kb+ prg rom.
 (defmapper mmc1 (:id 1 :slots ((ctrl-reg :initform #x0c :accessor mapper-ctrl)
                                (chr1-reg :initform #x00 :accessor mapper-chr1)
                                (chr2-reg :initform #x00 :accessor mapper-chr2)
                                (prg1-reg :initform #x00 :accessor mapper-prg1)
-                               (prg-ram :initform (bytevector #x2000)
-                                        :accessor mapper-prg-ram)
-                               (chr-ram :initform (bytevector #x2000)
-                                        :accessor mapper-chr-ram)
                                (accum :initform 0 :accessor mapper-accum)
                                (writes :initform 0 :accessor mapper-writes)))
-  (:init (let ((meta (rom-metadata rom)))
-           (when (plusp (getf (rom-metadata rom) :chr-size))
-             (setf (ppu-pattern-table (nes-ppu *nes*))
-                   (subseq (rom-chr rom) 0 #x2000))))
-   :getter (flet ((offset (x) (logior (* x #x4000) (wrap-bank address))))
-             (aref (rom-prg rom) (offset (get-bank mapper address))))
-   :setter (if (check-reset mapper value)
-               nil
+  (:init (when (plusp (pages instance :chr))
+           (setf (ppu-pattern-table (nes-ppu *nes*))
+                 (subseq (rom-chr rom) 0 #x2000)))
+   :getter (let ((offset (wrap-bank address)))
+             (aref (rom-prg rom) (+ (get-bank mapper address) offset)))
+   :setter (if (logbitp 7 value)
+               (reset mapper)
                (counted-write mapper address value))))
+
+(defmethod get-bank ((mapper mmc1) addr)
+  (with-accessors ((prg1 mapper-prg1)) mapper
+    ;; TODO: Is this complete and correct?
+    (let ((result (if (high-bank-p addr)
+                      (ecase (prg-mode mapper)
+                        (:switch-32k (logand prg1 #xfe))
+                        (:fix-first 0)
+                        (:fix-last prg1))
+                      (ecase (prg-mode mapper)
+                        (:switch-32k (logior (logand prg1 #xfe) 1))
+                        (:fix-first prg1)
+                        (:fix-last (1- (pages mapper :prg)))))))
+      (* #x4000 result))))
+
+(defmethod reset ((mapper mmc1))
+  (with-accessors ((ctrl-reg mapper-ctrl)) mapper
+    (setf (mapper-accum mapper) 0
+          (mapper-writes mapper) 0
+          ctrl-reg (logior ctrl-reg #x0c))))
 
 (defmethod counted-write ((mapper mmc1) addr val)
   (with-accessors ((accum mapper-accum)
                    (writes mapper-writes)) mapper
-    (setf accum (logior accum (ash (logand val 1) writes)))
+    (setf (ldb (byte 1 writes) accum) (lsb val))
     (incf writes)
     (when (= writes 5)
-      (cond ((< addr #x9fff) (setf (mapper-ctrl mapper) accum))
-            ((< addr #xbfff) (setf (mapper-chr1 mapper) accum))
-            ((< addr #xdfff) (setf (mapper-chr2 mapper) accum))
-            (t (setf (mapper-prg1 mapper) accum)))
+      (write-reg mapper (ldb (byte 2 13) addr) accum)
       (setf writes 0 accum 0))))
 
-(defmethod check-reset ((mapper mmc1) val)
-  (with-accessors ((accum mapper-accum)
-                   (writes mapper-writes)
-                   (ctrl-reg mapper-ctrl)) mapper
-    (when (logbitp 7 val)
-      (setf writes 0 accum 0 ctrl-reg (logior ctrl-reg #x0c)))))
-
-(defmethod get-bank ((mapper mmc1) addr)
-  (with-accessors ((prg1 mapper-prg1)
-                   (rom  mapper-rom)) mapper
-    (if (< addr #xc000)
-        (ecase (prg-mode mapper)
-          (:switch32k (logand prg1 #xfe))
-          (:fix-first 0)
-          (:fix-last prg1))
-        (ecase (prg-mode mapper)
-          (:switch32k (logior (logand prg1 #xfe) 1))
-          (:fix-first prg1)
-          (:fix-last (1- (getf (rom-metadata rom) :prg-roms)))))))
+(defmethod write-reg ((mapper mmc1) reg val)
+  (let ((page (logand val #x1f)))
+    (ecase reg
+      ;; Update Ctrl Register, TODO: Mirroring
+      (0 (setf (mapper-ctrl mapper) val))
+      ;; Set Low VRAM Bank
+      (1 (setf (mapper-chr1 mapper) val)
+         (if (and (eql (chr-mode mapper) :switch-8k)
+                  (< page (1- (pages mapper :chr))))
+             (setf (ppu-pattern-table (nes-ppu *nes*))
+                   (chr-slice (mapper-rom mapper) page #x2000))
+             (setf (subseq (ppu-pattern-table (nes-ppu *nes*)) 0 #x1000)
+                   (chr-slice (mapper-rom mapper) page))))
+      ;; Set High VRAM Bank
+      (2 (setf (mapper-chr2 mapper) val)
+         (when (eql (chr-mode mapper) :switch-4k)
+           (setf (subseq (ppu-pattern-table (nes-ppu *nes*)) #x1000)
+                 (chr-slice (mapper-rom mapper) page))))
+      ;; Set PRG ROM Bank
+      (3 (setf (mapper-prg1 mapper) (mod val (pages mapper :prg)))))))
 
 (defmethod mirroring ((mapper mmc1))
   (ecase (logand (mapper-ctrl mapper) 3)
@@ -107,15 +138,15 @@ NOTE: This macro is unhygienic in its handling of schema."
     (3 :horizontal)))
 
 (defmethod prg-mode ((mapper mmc1))
-  (ecase (logand (ash (mapper-ctrl mapper) -2) 3)
+  (ecase (ldb (byte 2 2) (mapper-ctrl mapper))
     ((0 1) :switch32k)
     (2 :fix-first)
     (3 :fix-last)))
 
 (defmethod chr-mode ((mapper mmc1))
-  (if (zerop (logand (ash (mapper-ctrl mapper) -4) 1))
-      :switch-8k
-      :switch-4k))
+  (if (logbitp 4 (mapper-ctrl mapper))
+      :switch-4k
+      :switch-8k))
 
 (defmapper unrom (:id 2)
   (:getter nil :setter nil))

@@ -33,7 +33,7 @@
   (scroll-x      0   :type u8)
   (scroll-y      0   :type u8)
   (scroll-next   :x  :type keyword)
-  (addr          0   :type u16)
+  (addr          0   :type u16) ;; TODO?: really 14-bits
   (addr-next     :hi :type keyword)
   (buffer        0   :type u8)
   (scanline      0   :type u16)

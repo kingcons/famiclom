@@ -6,11 +6,23 @@
   (ram    (bytevector #x0800))
   (ppu    (make-ppu))
   (apu    (make-apu))
-  (mapper nil))
+  (mapper nil :type (or null mapper)))
 
 (defconstant +cycles-per-second+ (* 1.79 (expt 2 20)))
 (defvar *nes* (make-nes))
 (defparameter *debug* nil)
+
+(defun lsb (num)
+  "Gets the least significant byte of an int or bit of a byte."
+  (etypecase num
+    (u8 (ldb (byte 1 0) num))
+    (u16 (ldb (byte 8 8) num))))
+
+(defun msb (num)
+  "Gets the most significant byte of an int or bit of a byte."
+  (etypecase num
+    (u8 (ldb (byte 1 7) num))
+    (u16 (ldb (byte 8 8) num))))
 
 (defun get-byte-ram% (addr)
   (aref (nes-ram *nes*) (logand addr #x7ff)))
