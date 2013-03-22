@@ -13,9 +13,9 @@
   (:documentation "Draw (i.e. blit) the given FRAME to *screen*."))
 
 ;; TODO: Seems to indicate that get-sprite, read-oam, and get-visible-sprites are first targets.
-(defun optimize-test ()
+(defun optimize-test (&optional (rom "smb.nes"))
   (reset *nes*)
-  (load-rom (app-path "smb.nes"))
+  (load-rom (app-path rom))
   (sdl:with-init (sdl:sdl-init-video sdl:sdl-init-audio)
     (setf *screen* (sdl:window 256 240 :bpp 24 :sw t))
     (with-accessors ((cpu nes-cpu)
