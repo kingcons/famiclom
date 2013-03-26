@@ -13,7 +13,6 @@
                (:file "input")
                (:file "apu")
                (:file "ppu")
-               ;(:file "graphics")
                (:file "famiclom")
                (:file "decompiler"))
   :in-order-to ((test-op (load-op famiclom-tests)))

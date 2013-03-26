@@ -66,4 +66,3 @@ the keypress of the event if it is of type :key-down-event."
   ; TODO: Should this just be (reset *gamepad*)?
   (when (= addr #x4016)
     (setf (pad-strobe *pad*) :a)))
-
