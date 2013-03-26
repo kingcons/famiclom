@@ -369,7 +369,7 @@
                (sprite-color (when (show-sprites ppu)
                                (get-sprite-pixel ppu x bg-color)))
                (color (pick-color bg-color sprite-color bd-color)))
-          (sdl:with-pixel (screen (sdl:fp *screen*))
+          (sdl:with-pixel (screen (sdl:fp sdl:*default-display*))
             (sdl:write-pixel screen x (ppu-scanline ppu) color)))))))
 
 (defun start-vblank (ppu)

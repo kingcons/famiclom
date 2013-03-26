@@ -57,9 +57,11 @@
     (reset (nes-cpu *nes*))))
 
 (defun play-rom (file)
+  (reset *nes*)
   (load-rom file)
   (sdl:with-init (sdl:sdl-init-video sdl:sdl-init-audio)
-    (setf *screen* (sdl:window 256 240 :bpp 24 :sw t))
+    (sdl:window 256 240 :bpp 24 :sw t)
+    (sdl:enable-key-repeat 10 10)
     (run)))
 
 (defun run ()
@@ -71,4 +73,5 @@
            (when (ppu-result-vblank p-step)
              (6502:nmi cpu))
            (when (ppu-result-new-frame p-step)
-             (sdl:update-display *screen*))))))
+             (sdl:update-display)
+             (get-input *pad*))))))

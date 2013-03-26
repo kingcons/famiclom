@@ -1,8 +1,5 @@
 (in-package :famiclom)
 
-(defvar *screen* nil
-  "A screen object to draw to. Should be 256x240.")
-
 (defgeneric init (backend)
   (:documentation "Initialize *screen* for the given BACKEND."))
 

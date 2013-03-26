@@ -18,6 +18,18 @@
 
 (defvar *pad* (make-pad) "An input device to retrieve commands from.")
 
+(defmacro with-event (() &body body)
+  "Poll until we receive an event, then execute BODY in a case on the event-type.
+In BODY, EVENT is bound to the current event and KEY to a function that returns
+the keypress of the event if it is of type :key-down-event."
+  `(let ((event (lispbuilder-sdl:new-event)))
+     (setf lispbuilder-sdl:*sdl-event* event)
+     (unwind-protect (loop until (zerop (sdl-cffi::sdl-poll-event event))
+                        do (flet ((key (x) (sdl::key-key x)))
+                             (case (lispbuilder-sdl:event-type event)
+                               ,@body)))
+       (lispbuilder-sdl:free-event event))))
+
 (defgeneric get-state (pad)
   (:documentation "Get the current state of PAD.")
   (:method ((pad pad))
@@ -29,19 +41,19 @@
     (with-accessors ((strobe pad-strobe)) pad
       (setf strobe (%strobe-state strobe :next)))))
 
-(defgeneric check-input (pad)
+(defgeneric get-input (pad)
   (:documentation "Check for input from the user.")
   (:method (pad)
-    (sdl:with-events ()
-      (:quit-event () :quit)
-      (:key-down-event (:key key) (handle-input key pad))
-      (:idle () nil))))
+    (with-event ()
+        (:quit-event :quit)
+        (:key-down-event (handle-input (key event) pad)))))
 
 (defun handle-input (key pad)
   "Update the state for the given KEY."
   (case key
     (:sdl-key-escape :quit)
-    (t (setf (aref (pad-buttons pad) (%keymap key)) 1))))
+    (t (alexandria:when-let (index (%keymap key))
+         (setf (aref (pad-buttons pad) index) 1)))))
 
 (defun get-byte-input% (addr)
   (if (= addr #x4016)
@@ -55,4 +67,3 @@
   (when (= addr #x4016)
     (setf (pad-strobe *pad*) :a)))
 
-; TODO: (sdl:enable-key-repeat 10 10)?
