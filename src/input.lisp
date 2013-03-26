@@ -18,17 +18,17 @@
 
 (defvar *pad* (make-pad) "An input device to retrieve commands from.")
 
-(defmacro with-event (() &body body)
+(defmacro with-event ((&optional (var 'event)) &body body)
   "Poll until we receive an event, then execute BODY in a case on the event-type.
 In BODY, EVENT is bound to the current event and KEY to a function that returns
 the keypress of the event if it is of type :key-down-event."
-  `(let ((event (lispbuilder-sdl:new-event)))
-     (setf lispbuilder-sdl:*sdl-event* event)
-     (unwind-protect (loop until (zerop (sdl-cffi::sdl-poll-event event))
+  `(let ((,var (lispbuilder-sdl:new-event)))
+     (setf lispbuilder-sdl:*sdl-event* ,var)
+     (unwind-protect (loop until (zerop (sdl-cffi::sdl-poll-event ,var))
                         do (flet ((key (x) (sdl::key-key x)))
-                             (case (lispbuilder-sdl:event-type event)
+                             (case (lispbuilder-sdl:event-type ,var)
                                ,@body)))
-       (lispbuilder-sdl:free-event event))))
+       (lispbuilder-sdl:free-event ,var))))
 
 (defgeneric get-state (pad)
   (:documentation "Get the current state of PAD.")
