@@ -68,6 +68,9 @@
          (1+ (6502::stack-pop-word cpu)))))))
 
 (defun maybe-jump ()
+  ;; TODO: We probably want jump-to-self, rts, and rti to signal
+  ;; "end-of-function". How are we going to restore higher-level structure?
+  ;; What about jsr, jmp, brk?
   (with-accessors ((cpu nes-cpu)) famiclom::*nes*
     (let ((length (first (disasm-ins (cpu-pc cpu))))
           (orig (cpu-pc cpu))
@@ -82,8 +85,8 @@
 (defun get-basic-block ()
   (with-accessors ((cpu nes-cpu)) famiclom::*nes*
     (loop for (len asm) = (disasm-ins (cpu-pc cpu) #'sexpify-instruction)
-       until (member (first asm) '(:jmp :jsr :brk :rti :rts))
-       do (incf (cpu-pc cpu) len) collect asm)))
+       collect asm until (member (first asm) '(:jmp :jsr :brk :rti :rts))
+       do (incf (cpu-pc cpu) len))))
 
 (defun process-block (code pc)
   (let ((name (node-id)))
@@ -92,6 +95,8 @@
   (maybe-jump))
 
 (defun decompile-rom ()
+  ;; TODO: Currently dying because JumpEngine sets up an address to jump to
+  ;; and we don't simulate that, wind up in a field of 0s. (i.e. brk)
   "Decompile the current binary."
   (loop for pc = (cpu-pc (nes-cpu famiclom::*nes*))
      for code = (get-basic-block)
