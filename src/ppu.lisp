@@ -1,5 +1,12 @@
 (in-package :famiclom)
 
+;;;; References:
+;; http://badderhacksnet.ipage.com/badderhacks/index.php - The NES PPU
+;; http://wiki.nesdev.com/w/index.php/NMI
+;; http://wiki.nesdev.com/w/index.php/PPU_nametables
+;; http://wiki.nesdev.com/w/index.php/PPU_registers
+;; http://wiki.nesdev.com/w/index.php/PPU_scrolling
+
 (defvar *screen* nil
   "A screen object to draw to. Should be 256x240.")
 
@@ -122,16 +129,6 @@
                  (let* ((initial (wrap-nametable addr))
                         (base (if (< initial #x400) 0 256)))
                    (logior (wrap-byte meta-x) base)))))))
-
-;;;; Helpers
-
-(defun wrap-nametable (val)
-  "Wrap VAL to index into the PPU nametable."
-  (logand val #x07ff))
-
-(defun wrap-palette (val)
-  "Wrap VAL to index into the PPU palette."
-  (logand val #x1f))
 
 ;;;; VRAM Memory Map
 

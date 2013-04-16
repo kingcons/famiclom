@@ -5,19 +5,6 @@
 ;; Bigtime TENES methods: init, shutdown, read, write.
 ;; Also has scanline_start, scanline_end, save_state, restore_state.
 
-(defun chr-slice (rom n &optional (size #x1000))
-  "Given a ROM and page, n, return the Nth 4kb chunk of sprite data (CHR)."
-  (let ((start (* #x1000 n)))
-    (subseq (rom-chr rom) start (+ start size))))
-
-(defun wrap-bank (addr)
-  "Wrap an address, ADDR, to a 16k ROM bank."
-  (logand addr #x3fff))
-
-(defun high-bank-p (addr)
-  "Is ADDR accessing the high ROM bank (i.e. > #xc000)."
-  (logbitp 14 addr))
-
 (defclass mapper () ((rom :initarg :rom :accessor mapper-rom)))
 
 (defgeneric pages (mapper kind)
@@ -64,7 +51,7 @@ NOTE: This macro is unhygienic in its handling of schema."
              (aref (rom-prg rom) (logand address (1- size))))
    :setter nil))
 
-;; TODO: We do not support the few MMC1 games with 32kb banks/512kb+ prg rom.
+;; NOTE: We do not support the few MMC1 games with 32kb banks/512kb+ prg rom.
 (defmapper mmc1 (:id 1 :slots ((ctrl-reg :initform #x0c :accessor mapper-ctrl)
                                (chr1-reg :initform #x00 :accessor mapper-chr1)
                                (chr2-reg :initform #x00 :accessor mapper-chr2)
@@ -131,14 +118,14 @@ NOTE: This macro is unhygienic in its handling of schema."
       (3 (setf (mapper-prg1 mapper) (mod val (pages mapper :prg)))))))
 
 (defmethod mirroring ((mapper mmc1))
-  (ecase (logand (mapper-ctrl mapper) 3)
+  (case (logand (mapper-ctrl mapper) 3)
     (0 :lower)
     (1 :upper)
     (2 :vertical)
     (3 :horizontal)))
 
 (defmethod prg-mode ((mapper mmc1))
-  (ecase (ldb (byte 2 2) (mapper-ctrl mapper))
+  (case (ldb (byte 2 2) (mapper-ctrl mapper))
     ((0 1) :switch32k)
     (2 :fix-first)
     (3 :fix-last)))
@@ -148,9 +135,9 @@ NOTE: This macro is unhygienic in its handling of schema."
       :switch-4k
       :switch-8k))
 
-(defmapper unrom (:id 2)
-  (:getter nil :setter nil))
-(defmapper cnrom (:id 3)
-  (:getter nil :setter nil))
-(defmapper mmc3 (:id 4)
-  (:getter nil :setter nil))
+;; (defmapper unrom (:id 2)
+;;   (:getter nil :setter nil))
+;; (defmapper cnrom (:id 3)
+;;   (:getter nil :setter nil))
+;; (defmapper mmc3 (:id 4)
+;;   (:getter nil :setter nil))

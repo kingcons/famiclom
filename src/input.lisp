@@ -56,13 +56,12 @@ the keypress of the event if it is of type :key-down-event."
          (setf (aref (pad-buttons pad) index) 1)))))
 
 (defun get-byte-input% (addr)
-  (if (= addr #x4016)
-      (prog1
-          (get-state *pad*)
-        (next-state *pad*))
-      0))
+  (case addr
+    (#x4015 (format t "OAM DMA not yet implemented."))
+    (#x4016 (prog1 (get-state *pad*)
+              (next-state *pad*)))
+    (otherwise 0)))
 
 (defun (setf get-byte-input%) (new-val addr)
-  ; TODO: Should this just be (reset *gamepad*)?
   (when (= addr #x4016)
     (setf (pad-strobe *pad*) :a)))
