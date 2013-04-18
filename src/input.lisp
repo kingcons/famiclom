@@ -54,14 +54,3 @@ the keypress of the event if it is of type :key-down-event."
     (:sdl-key-escape :quit)
     (t (alexandria:when-let (index (%keymap key))
          (setf (aref (pad-buttons pad) index) 1)))))
-
-(defun get-byte-input% (addr)
-  (case addr
-    (#x4015 (format t "OAM DMA not yet implemented."))
-    (#x4016 (prog1 (get-state *pad*)
-              (next-state *pad*)))
-    (otherwise 0)))
-
-(defun (setf get-byte-input%) (new-val addr)
-  (when (= addr #x4016)
-    (setf (pad-strobe *pad*) :a)))
