@@ -34,10 +34,9 @@
   (with-accessors ((cpu nes-cpu)
                    (ppu nes-ppu)) *nes*
     (loop
-       (let ((c-step (6502-step cpu (get-byte (6502:immediate cpu))))
+       (let ((c-step (6502-step cpu (6502:getter '6502:immediate nil cpu)))
              (p-step (ppu-step ppu (6502:cpu-cc cpu))))
          (when (ppu-result-vblank p-step)
            (6502:nmi cpu))
          (when (ppu-result-new-frame p-step)
-           (sdl:update-display)
-           (get-input *pad*))))))
+           (sdl:update-display))))))

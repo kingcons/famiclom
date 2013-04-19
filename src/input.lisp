@@ -1,5 +1,7 @@
 (in-package :famiclom)
 
+;;; TODO: Fix %strobe-state, %keymap for new defenum.
+
 (defenum strobe-state (:a :b :select :start :up :down :left :right))
 (defenum keymap ((:sdl-key-a       :a)
                  (:sdl-key-b       :b)

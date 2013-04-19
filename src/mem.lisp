@@ -22,9 +22,13 @@
   "Wrap ADDR to index the CPU's RAM."
   (logand addr #x7ff))
 
+(defun wrap-pattern-table (addr)
+  "Wrap ADDR to index into a PPU pattern table."
+  (logand addr #x0fff))
+
 (defun wrap-nametable (addr)
-  "Wrap ADDR to index into the PPU nametable."
-  (logand addr #x07ff))
+  "Wrap ADDR to index into a PPU name table."
+  (logand addr #x03ff))
 
 (defun wrap-palette (addr)
   "Wrap ADDR to index into the PPU palette."
@@ -36,8 +40,8 @@
 (defun (setf get-byte-ram%) (new-val addr)
   (setf (aref (nes-ram *nes*) (wrap-ram addr)) new-val))
 
-(defun chr-slice (rom n &optional (size #x1000))
-  "Given a ROM and page, n, return the Nth 4kb chunk of sprite data (CHR)."
+(defun get-page (rom n &optional (size #x1000))
+  "Given a ROM and page, N, return the Nth 4kb chunk of sprite data."
   (let ((start (* #x1000 n)))
     (subseq (rom-chr rom) start (+ start size))))
 

@@ -46,7 +46,10 @@ NOTE: This macro is unhygienic in its handling of schema."
 
 (defmapper nrom (:id 0)
   (:init (when (plusp (pages instance :chr))
-           (setf (ppu-pattern-table (nes-ppu *nes*)) (rom-chr rom)))
+           (let ((lower (subseq (rom-chr rom) 0 #x1000))
+                 (upper (subseq (rom-chr rom) #x1000)))
+             (setf (ppu-pattern-lo (nes-ppu *nes*)) lower
+                   (ppu-pattern-hi (nes-ppu *nes*)) upper)))
    :getter (let ((size (getf (rom-metadata rom) :prg-size)))
              (aref (rom-prg rom) (logand address (1- size))))
    :setter nil))
@@ -59,8 +62,10 @@ NOTE: This macro is unhygienic in its handling of schema."
                                (accum :initform 0 :accessor mapper-accum)
                                (writes :initform 0 :accessor mapper-writes)))
   (:init (when (plusp (pages instance :chr))
-           (setf (ppu-pattern-table (nes-ppu *nes*))
-                 (subseq (rom-chr rom) 0 #x2000)))
+           (let ((lower (subseq (rom-chr rom) 0 #x1000))
+                 (upper (subseq (rom-chr rom) #x1000)))
+             (setf (ppu-pattern-lo (nes-ppu *nes*)) lower
+                   (ppu-pattern-hi (nes-ppu *nes*)) upper)))
    :getter (let ((offset (wrap-bank address)))
              (aref (rom-prg rom) (+ (get-bank mapper address) offset)))
    :setter (if (logbitp 7 value)
@@ -106,14 +111,14 @@ NOTE: This macro is unhygienic in its handling of schema."
          (if (and (eql (chr-mode mapper) :switch-8k)
                   (< page (1- (pages mapper :chr))))
              (setf (ppu-pattern-table (nes-ppu *nes*))
-                   (chr-slice (mapper-rom mapper) page #x2000))
+                   (get-page (mapper-rom mapper) page #x2000))
              (setf (subseq (ppu-pattern-table (nes-ppu *nes*)) 0 #x1000)
-                   (chr-slice (mapper-rom mapper) page))))
+                   (get-page (mapper-rom mapper) page))))
       ;; Set High VRAM Bank
       (2 (setf (mapper-chr2 mapper) val)
          (when (eql (chr-mode mapper) :switch-4k)
            (setf (subseq (ppu-pattern-table (nes-ppu *nes*)) #x1000)
-                 (chr-slice (mapper-rom mapper) page))))
+                 (get-page (mapper-rom mapper) page))))
       ;; Set PRG ROM Bank
       (3 (setf (mapper-prg1 mapper) (mod val (pages mapper :prg)))))))
 

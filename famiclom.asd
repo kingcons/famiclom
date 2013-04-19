@@ -8,12 +8,11 @@
   :depends-on (:cl-6502 :romreader :lispbuilder-sdl)
   :serial t
   :components ((:file "packages")
-               (:file "nestest")
                (:file "mappers")
                (:file "mem")
                (:file "input")
                (:file "apu")
-               (:file "ppu")
+               (:file "new-ppu")
                (:file "famiclom"))
   :in-order-to ((test-op (load-op famiclom-tests)))
   :perform (test-op :after (op c)
