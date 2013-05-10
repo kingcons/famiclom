@@ -18,8 +18,8 @@
 (defun load-rom (file)
   "Load the given FILE into the NES."
   (let* ((rom (romreader:load-rom file))
-         (mapper (getf (rom-metadata rom) :mapper)))
-    (setf (nes-mapper *nes*) (make-mapper (car mapper) :rom rom))
+         (mapper-id (getf (rom-metadata rom) :mapper-id)))
+    (setf (nes-mapper *nes*) (make-mapper mapper-id :rom rom))
     (reset (nes-cpu *nes*))))
 
 (defun play-rom (file)
