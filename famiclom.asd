@@ -8,7 +8,6 @@
   :depends-on (:cl-6502 :romreader :lispbuilder-sdl)
   :serial t
   :components ((:file "packages")
-               (:file "nestest")
                (:file "mappers")
                (:file "mem")
                (:file "input")
