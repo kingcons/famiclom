@@ -4,7 +4,7 @@
   (:import-from :6502 #:wrap-byte
                       #:make-cpu
                       #:cpu
-                      #:6502-step
+                      #:step-cpu
                       #:current-instruction
                       #:reset
                       #:u8

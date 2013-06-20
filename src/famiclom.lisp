@@ -10,10 +10,6 @@
 
 (defconstant +cycles-per-second+ (* 1.79 (expt 2 20)))
 (defvar *nes* (make-nes))
-(defparameter *debug* nil)
-
-(defmethod 6502-step :before ((cpu cpu) opcode)
-  (when *debug* (current-instruction cpu t)))
 
 (defun load-rom (file)
   "Load the given FILE into the NES."
@@ -34,7 +30,7 @@
   (with-accessors ((cpu nes-cpu)
                    (ppu nes-ppu)) *nes*
     (loop
-       (let ((c-step (6502-step cpu (get-byte (6502:immediate cpu))))
+       (let ((c-step (step-cpu cpu (get-byte (6502:cpu-pc cpu))))
              (p-step (ppu-step ppu (6502:cpu-cc cpu))))
          (when (ppu-result-vblank p-step)
            (6502:nmi cpu))
