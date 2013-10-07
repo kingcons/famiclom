@@ -10,11 +10,7 @@
 
 ;;; KLUDGE: The APU also currently handles input requests. Cheating!
 (defun get-byte-apu% (addr)
-  (case addr
-    (#x4014 (format t "OAM DMA not yet implemented."))
-    (#x4016 (prog1 (get-state *pad*)
-              (next-state *pad*)))
-    (otherwise 0)))
+  0)
 
 (defun (setf get-byte-apu%) (new-val addr)
   (cond ((= addr #x4014) (format t "OAM DMA not yet implemented."))

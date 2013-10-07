@@ -1,14 +1,21 @@
 (in-package :famiclom)
 
+(defvar *pad-states* '#0=(:a :b :select :start :up :down :left :right . #0#))
+
 (defenum strobe-state (:a :b :select :start :up :down :left :right))
-(defenum keymap ((:sdl-key-a       :a)
-                 (:sdl-key-b       :b)
-                 (:sdl-key-space   :select)
-                 (:sdl-key-return  :start)
-                 (:sdl-key-up      :up)
-                 (:sdl-key-down    :down)
-                 (:sdl-key-left    :left)
-                 (:sdl-key-right   :right)))
+
+(defvar *keymap*
+  '((:sdl-key-a       :a)
+    (:sdl-key-b       :b)
+    (:sdl-key-space   :select)
+    (:sdl-key-return  :start)
+    (:sdl-key-up      :up)
+    (:sdl-key-down    :down)
+    (:sdl-key-left    :left)
+    (:sdl-key-right   :right)))
+
+(defun %keymap (key)
+  (position key *keymap* :key #'first))
 
 (deftype bool () '(unsigned-byte 1))
 
@@ -39,7 +46,7 @@ the keypress of the event if it is of type :key-down-event."
   (:documentation "Update the strobe value of PAD.")
   (:method ((pad pad))
     (with-accessors ((strobe pad-strobe)) pad
-      (setf strobe (%strobe-state strobe :next)))))
+      (setf strobe (pop *pad-states*)))))
 
 (defgeneric get-input (pad)
   (:documentation "Check for input from the user.")
@@ -54,3 +61,10 @@ the keypress of the event if it is of type :key-down-event."
     (:sdl-key-escape :quit)
     (t (alexandria:when-let (index (%keymap key))
          (setf (aref (pad-buttons pad) index) 1)))))
+
+(defun get-byte-input% (addr)
+  (prog1 (get-state *pad*)
+    (next-state *pad*)))
+
+(defun (setf get-byte-input%) (new-val addr)
+  (setf (pad-strobe *pad*) :a))
