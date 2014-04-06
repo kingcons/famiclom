@@ -1,70 +1,43 @@
 (in-package :famiclom)
 
-(defvar *pad-states* '#0=(:a :b :select :start :up :down :left :right . #0#))
-
-(defenum strobe-state (:a :b :select :start :up :down :left :right))
-
 (defvar *keymap*
-  '((:sdl-key-a       :a)
-    (:sdl-key-b       :b)
-    (:sdl-key-space   :select)
-    (:sdl-key-return  :start)
-    (:sdl-key-up      :up)
-    (:sdl-key-down    :down)
-    (:sdl-key-left    :left)
-    (:sdl-key-right   :right)))
-
-(defun %keymap (key)
-  (position key *keymap* :key #'first))
+  '((:a       :sdl-key-z)
+    (:b       :sdl-key-x)
+    (:select  :sdl-key-space)
+    (:start   :sdl-key-return)
+    (:up      :sdl-key-up)
+    (:down    :sdl-key-down)
+    (:left    :sdl-key-left)
+    (:right   :sdl-key-right)))
 
 (deftype bool () '(unsigned-byte 1))
 
 (defstruct pad
   (buttons (make-array 8 :element-type 'bool))
-  (strobe :a :type keyword))
+  (strobe '#0=(:a :b :select :start :up :down :left :right . #0#)))
 
 (defvar *pad* (make-pad) "An input device to retrieve commands from.")
 
-(defmacro with-event ((&optional (var 'event)) &body body)
-  "Poll until we receive an event, then execute BODY in a case on the event-type.
-In BODY, EVENT is bound to the current event and KEY to a function that returns
-the keypress of the event if it is of type :key-down-event."
-  `(let ((,var (lispbuilder-sdl:new-event)))
-     (setf lispbuilder-sdl:*sdl-event* ,var)
-     (unwind-protect (loop until (zerop (sdl-cffi::sdl-poll-event ,var))
-                        do (flet ((key (x) (sdl::key-key x)))
-                             (case (lispbuilder-sdl:event-type ,var)
-                               ,@body)))
-       (lispbuilder-sdl:free-event ,var))))
+(defun %pad-index (pad)
+  (let ((key (first (pad-strobe pad))))
+    (position key *keymap* :key #'first)))
 
-(defgeneric get-state (pad)
-  (:documentation "Get the current state of PAD.")
-  (:method ((pad pad))
-    (aref (pad-buttons pad) (%strobe-state (pad-strobe pad)))))
+(defun get-state (pad)
+  "Get the state of the button currently strobed by PAD."
+  (aref (pad-buttons pad) (%pad-index pad)))
 
-(defgeneric next-state (pad)
-  (:documentation "Update the strobe value of PAD.")
-  (:method ((pad pad))
-    (with-accessors ((strobe pad-strobe)) pad
-      (setf strobe (pop *pad-states*)))))
+(defun next-state (pad)
+  "Update the strobe value of PAD."
+  (pop (pad-strobe pad)))
 
-(defgeneric get-input (pad)
-  (:documentation "Check for input from the user.")
-  (:method (pad)
-    (with-event ()
-        (:quit-event :quit)
-        (:key-down-event (handle-input (key event) pad)))))
-
-(defun handle-input (key pad)
-  "Update the state for the given KEY."
-  (case key
-    (:sdl-key-escape :quit)
-    (t (alexandria:when-let (index (%keymap key))
-         (setf (aref (pad-buttons pad) index) 1)))))
+(defun reset-strobe (pad)
+  "Reset PAD's strobe starting at :a."
+  (with-accessors ((strobe pad-strobe)) pad
+    (loop until (eql :a (first strobe)) do (pop strobe))))
 
 (defun get-byte-input% (addr)
   (prog1 (get-state *pad*)
     (next-state *pad*)))
 
 (defun (setf get-byte-input%) (new-val addr)
-  (setf (pad-strobe *pad*) :a))
+  (reset-strobe *pad*))
