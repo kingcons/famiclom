@@ -35,5 +35,4 @@
          (when (ppu-result-vblank p-step)
            (6502:nmi cpu))
          (when (ppu-result-new-frame p-step)
-           (sdl:update-display)
-           (get-input *pad*))))))
+           (sdl:update-display))))))
