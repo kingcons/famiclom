@@ -357,6 +357,7 @@
       (6 (update-addr ppu new-val))
       (7 (write-vram ppu (ppu-addr ppu) new-val)))))
 
+;; TODO: This has awful performance. Render without write-pixel!
 (defgeneric render-scanline (ppu)
   (:method ((ppu ppu)) ;; TODO: Mirroring. Scrolling?
     (let ((bd-color (get-color ppu #x3f00)))
