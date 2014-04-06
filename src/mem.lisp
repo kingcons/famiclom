@@ -4,6 +4,7 @@
   (cond ((< addr #x2000) (get-byte-ram% addr))
         ((< addr #x4000) (get-byte-ppu% addr))
         ((= addr #x4016) (get-byte-input% addr))
+        ((< addr #x4020) (get-byte-apu% addr))
         ((< addr #x8000) (format t "Cartridge RAM not yet implemented"))
         (t (get-mapper (nes-mapper *nes*) addr))))
 
@@ -11,7 +12,7 @@
   (cond ((< addr #x2000) (setf (get-byte-ram% addr) new-val))
         ((< addr #x4000) (setf (get-byte-ppu% addr) new-val))
         ((= addr #x4016) (setf (get-byte-input% addr) new-val))
-        ((< addr #x4020) (setf (get-byte-input% addr) new-val))
+        ((< addr #x4020) (setf (get-byte-apu% addr) new-val))
         ((< addr #x8000) (format t "Cartridge RAM not yet implemented"))
         (t (set-mapper (nes-mapper *nes*) addr new-val))))
 
