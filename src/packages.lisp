@@ -10,7 +10,6 @@
                       #:u8
                       #:u16
                       #:bytevector
-                      #:defenum
                       #:get-byte
                       #:get-word
                       #:get-range)

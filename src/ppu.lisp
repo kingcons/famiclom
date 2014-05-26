@@ -1,6 +1,7 @@
 (in-package :famiclom)
 
 ;;;; References:
+;; https://github.com/pcwalton/sprocketnes/blob/master/ppu.rs
 ;; http://badderhacksnet.ipage.com/badderhacks/index.php - The NES PPU
 ;; http://wiki.nesdev.com/w/index.php/NMI
 ;; http://wiki.nesdev.com/w/index.php/PPU_nametables

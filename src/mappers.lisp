@@ -5,7 +5,8 @@
 ;; Bigtime TENES methods: init, shutdown, read, write.
 ;; Also has scanline_start, scanline_end, save_state, restore_state.
 
-(defclass mapper () ((rom :initarg :rom :accessor mapper-rom)))
+(defclass mapper ()
+  ((rom :initarg :rom :accessor mapper-rom)))
 
 (defgeneric pages (mapper kind)
   (:documentation "Get the number of pages in a ROM. KIND may be :PRG or :CHR.")
