@@ -32,10 +32,10 @@ the very least as a displaced array into the ROM object.
 The Memory Mapper Protocol has yet to be determined. A comparison
 follows...
 
-**sprocketnes** API is: load-prg, load-chr, store-prg, store-chr, next-scanline
-**neth** API is: sync, init, write (using displaced arrays
+* **sprocketnes** API is: load-prg, load-chr, store-prg, store-chr, next-scanline
+* **neth** API is: sync, init, write (using displaced arrays
                                to put data into write place for reading?)
-**tenes** API is: init, read, write, save-state, restore-state,
+* **tenes** API is: init, read, write, save-state, restore-state,
                     some next-scanline-ish stuff
 
 MMC1 and MMC3 are somewhat complicated. The other 3 main mappers are
