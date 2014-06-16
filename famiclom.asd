@@ -10,6 +10,7 @@
   :components ((:file "packages")
                (:file "mappers")
                (:file "mem")
+               (:file "saves")
                (:file "input")
                (:file "apu")
                (:file "ppu")
