@@ -18,7 +18,9 @@
 
 (defgeneric make-mapper (id &rest args)
   (:documentation "Return a mapper instance for the given ID.")
-  (:method (id &rest args) (error "This mapper is not yet supported.")))
+  (:method (id &rest args)
+    (declare (ignore id args))
+    (error "This mapper is not yet supported.")))
 
 (defgeneric get-mapper (mapper address)
   (:documentation "Get the value of ADDRESS from MAPPER."))
